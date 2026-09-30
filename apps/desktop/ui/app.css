@@ -1,32 +1,88 @@
+/* CloudPass — desktop application.
+ *
+ * The same design system as the web portal, and nothing else: no accent colour, no
+ * gradients, no shadows, no rounded corners. The whole design is type, hairlines and
+ * space, so the things that are usually decoration — weight, tracking, a 1px border —
+ * have to carry the hierarchy on their own.
+ *
+ * The typeface is served from the application bundle. The application runs under
+ * `default-src 'none'`, and the rule the project set for itself is that nothing loads from
+ * a third party; a font CDN would be exactly that, so the two subsets the interface needs
+ * live in `fonts/` next to this file.
+ */
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('fonts/montserrat-cyrillic.woff2') format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('fonts/montserrat-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+
 :root {
   color-scheme: dark;
-  --background: #0f172a;
-  --surface: #1e293b;
-  --border: #334155;
-  --text: #e2e8f0;
-  --muted: #94a3b8;
-  --accent: #60a5fa;
+  --bg: #000000;
+  --fg: #ffffff;
+  --muted: #9a9a9a;
+  --faint: #6a6a6a;
+  --line: #1c1c1c;
+  --line-strong: #3a3a3a;
+  --field: #080808;
+  --maxw: 1120px;
+  --gutter: 32px;
 }
 
 * {
   box-sizing: border-box;
 }
 
+/* `hidden` has to actually hide.
+ *
+ * The user-agent stylesheet says `[hidden] { display: none }`, and any author rule that
+ * sets `display` beats it — cascade origin outranks specificity. Panels are hidden and
+ * shown by `renderStatus`/`showPanel`, so without this line every screen would be painted
+ * at once and `hidden` would become a lie only the DOM believes. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--background);
-  color: var(--text);
-  font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: 'Montserrat', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
+/* --- the column ------------------------------------------------------------ */
+
+/* One column of bands, each separated from the next by a single hairline: the masthead,
+   the visible panel, the footer. The panel is a stripe in that column, not a card
+   floating on a background. */
 .shell {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 32px 24px 48px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  width: 100%;
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding-inline: var(--gutter);
 }
 
 .masthead {
@@ -34,113 +90,196 @@ body {
   align-items: baseline;
   justify-content: space-between;
   gap: 16px;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 12px;
+  flex-wrap: wrap;
+  padding-block: 26px;
 }
 
+/* --- type ------------------------------------------------------------------ */
+
 h1 {
-  font-size: 20px;
   margin: 0;
-  letter-spacing: 0.01em;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
 }
 
 h2 {
-  font-size: 15px;
   margin: 0 0 4px;
-  color: var(--accent);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--faint);
 }
 
 h3 {
-  font-size: 14px;
   margin: 20px 0 4px;
-  color: var(--text);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--faint);
 }
 
 .panel > h3:first-of-type {
-  margin-top: 12px;
+  margin-top: 4px;
 }
 
 /* Two forms in one panel: separate them, so "which button submits what" is visible. */
 .panel > form + h3 {
-  border-top: 1px solid var(--border);
-  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
 }
 
 .status {
   margin: 0;
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--muted);
 }
 
 .panel {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 18px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  padding-block: 26px 32px;
+  border-top: 1px solid var(--line);
 }
 
 .hint {
   margin: 0 0 16px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
+
+/* --- forms ----------------------------------------------------------------- */
 
 form {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 label {
-  font-size: 13px;
-  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--faint);
 }
 
 input {
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: #0b1220;
-  color: var(--text);
-  font-size: 15px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: var(--field);
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+input::placeholder {
+  color: #4d4d4d;
 }
 
 input:focus-visible,
-button:focus-visible {
-  outline: 2px solid var(--accent);
+textarea:focus-visible {
+  outline: 1px solid var(--fg);
   outline-offset: 1px;
+  border-color: var(--fg);
 }
+
+textarea {
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: var(--field);
+  color: var(--fg);
+  font: inherit;
+  font-family: 'Montserrat', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+/* --- buttons ---------------------------------------------------------------- */
 
 button {
-  margin-top: 4px;
-  padding: 10px 14px;
-  border: 0;
-  border-radius: 8px;
-  background: var(--accent);
-  color: #0b1220;
-  font-size: 15px;
+  margin-top: 0;
+  padding: 12px 22px;
+  border: 1px solid var(--fg);
+  border-radius: 0;
+  background: var(--fg);
+  color: #000000;
+  font: inherit;
+  font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 }
 
-.footer {
-  font-size: 12px;
-  color: var(--muted);
-  border-top: 1px solid var(--border);
-  padding-top: 12px;
-  overflow-wrap: anywhere;
+button:hover {
+  background: #d0d0d0;
+  border-color: #d0d0d0;
+}
+
+button.secondary,
+button.danger {
+  background: transparent;
+  color: var(--fg);
+  border-color: var(--line-strong);
+}
+
+button.secondary:hover,
+button.danger:hover {
+  background: transparent;
+  border-color: var(--fg);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+button.link {
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line-strong);
+  border-radius: 0;
+  color: var(--fg);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+button.link:hover {
+  background: none;
+  border-bottom-color: var(--fg);
+}
+
+button:focus-visible {
+  outline: 1px solid var(--fg);
+  outline-offset: 2px;
 }
 
 /* --- messages -------------------------------------------------------------- */
 
+/* A bar rather than a dialog: it has to be impossible to miss, and the inverted colours
+   are the only way to be loud inside a palette this quiet. */
 .banner {
-  margin: 0;
-  padding: 10px 14px;
-  border-radius: 8px;
-  border: 1px solid #7f1d1d;
-  background: #450a0a;
-  color: #fecaca;
-  font-size: 14px;
+  margin: 18px 0 0;
+  padding: 14px 20px;
+  border: 0;
+  background: var(--fg);
+  color: #000000;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.5;
 }
 
 /* --- layout helpers -------------------------------------------------------- */
@@ -150,6 +289,7 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
   margin-bottom: 12px;
 }
 
@@ -160,98 +300,72 @@ button {
 .row-actions {
   display: flex;
   gap: 8px;
-}
-
-button {
-  margin-top: 0;
-}
-
-button.secondary {
-  background: transparent;
-  color: var(--text);
-  border: 1px solid var(--border);
-}
-
-button.danger {
-  background: transparent;
-  color: #fca5a5;
-  border: 1px solid #7f1d1d;
-}
-
-button:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-
-textarea {
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: #0b1220;
-  color: var(--text);
-  font: inherit;
-  resize: vertical;
+  flex-wrap: wrap;
 }
 
 /* --- item list ------------------------------------------------------------- */
+
 .item-list {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  border-top: 1px solid var(--line);
 }
 
+.item {
+  border-bottom: 1px solid var(--line);
+}
+
+/* A whole row is the target, not a word inside it: the title of an item is a long,
+   unpredictable string, and a person aiming at it should not have to hit the text. */
 .item-button {
   width: 100%;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
-  padding: 10px 12px;
-  background: #0b1220;
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  gap: 4px;
+  padding: 14px 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
   text-align: left;
+  font: inherit;
   font-weight: 500;
+  cursor: pointer;
+}
+
+.item-button:hover {
+  background: none;
+  color: var(--fg);
 }
 
 .item-title {
-  font-size: 15px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--fg);
 }
 
 .item-subtitle {
-  font-size: 12px;
-  color: var(--muted);
+  font-size: 0.8125rem;
+  color: var(--faint);
   overflow-wrap: anywhere;
 }
 
 /* --- emergency kit --------------------------------------------------------- */
 
-button.link {
-  background: none;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  color: var(--accent);
-  font: inherit;
-  font-weight: 500;
-  cursor: pointer;
-  text-decoration: underline;
-}
-
 .kit {
   margin: 0 0 12px;
-  padding: 14px;
-  background: #0b1220;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
+  padding: 20px;
+  background: var(--field);
+  border: 1px solid var(--line-strong);
+  color: var(--fg);
   /* Monospace, and it wraps: a recovery key that overflows the panel is a key someone
      copies half of. */
-  font: 13px/1.6 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.7;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   user-select: all;
@@ -259,3 +373,30 @@ button.link {
   overflow-y: auto;
 }
 
+/* --- footer ---------------------------------------------------------------- */
+
+/* Where the application was called from and where it keeps its data. It wraps rather than
+   clipping: at the minimum window width the Argon2id parameters and the data directory
+   are long, and neither may be cut off or pushed out of the window. */
+.footer {
+  margin-top: auto;
+  padding-block: 22px 32px;
+  border-top: 1px solid var(--line);
+  font-size: 0.75rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* --- narrow window --------------------------------------------------------- */
+
+@media (max-width: 720px) {
+  :root {
+    --gutter: 20px;
+  }
+
+  .masthead {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+}
