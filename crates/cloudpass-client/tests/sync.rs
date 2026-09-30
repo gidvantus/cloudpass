@@ -32,6 +32,7 @@ fn params() -> KdfParams {
 fn draft(title: &str, password: &str) -> ItemDraft {
     ItemDraft {
         title: title.to_owned(),
+        project: String::new(),
         username: "octocat".to_owned(),
         password: password.to_owned(),
         url: String::new(),

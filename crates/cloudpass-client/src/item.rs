@@ -16,6 +16,15 @@ pub struct Item {
     pub id: Uuid,
     pub vault_id: Uuid,
     pub title: String,
+    /// The project this entry is filed under, or empty for none.
+    ///
+    /// A project is only ever a name inside the sealed record: there is no project list on
+    /// the device and none on the server, so the set of projects is exactly the set of names
+    /// in use. That keeps the grouping as private as the entries it groups — the server
+    /// cannot tell that projects exist at all — and leaves no second structure to keep in
+    /// step when an entry is edited, deleted, or pulled from another device.
+    #[serde(default)]
+    pub project: String,
     #[serde(default)]
     pub username: String,
     #[serde(default)]
@@ -38,6 +47,7 @@ impl Item {
     pub fn draft(&self) -> ItemDraft {
         ItemDraft {
             title: self.title.clone(),
+            project: self.project.clone(),
             username: self.username.clone(),
             password: self.password.clone(),
             url: self.url.clone(),
@@ -51,6 +61,10 @@ impl Item {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ItemDraft {
     pub title: String,
+    /// See [`Item::project`]. Defaulted, so a caller that predates projects — the desktop
+    /// client's form, or an older page — still produces a valid draft.
+    #[serde(default)]
+    pub project: String,
     pub username: String,
     pub password: String,
     pub url: String,
@@ -67,6 +81,9 @@ impl ItemDraft {
     #[must_use]
     pub fn normalised(mut self) -> Self {
         self.title = self.title.trim().to_owned();
+        // Trimmed like a title: a project name is a filing label, and " Work" filed
+        // separately from "Work" is two projects that nobody meant to create.
+        self.project = self.project.trim().to_owned();
         self.username = self.username.trim().to_owned();
         self.url = self.url.trim().to_owned();
         self.totp = self
@@ -77,6 +94,10 @@ impl ItemDraft {
     }
 
     /// Whether this draft has nothing worth saving.
+    ///
+    /// The project is deliberately not consulted: a project name on its own describes where
+    /// an entry would go, not an entry, and a "project" created that way would be a password
+    /// with nothing in it.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.title.is_empty()
@@ -96,6 +117,7 @@ mod tests {
     fn a_draft_trims_but_never_alters_a_secret() {
         let draft = ItemDraft {
             title: "  GitHub  ".to_owned(),
+            project: "  Work  ".to_owned(),
             username: " octocat ".to_owned(),
             // A password may legitimately contain leading or trailing spaces.
             password: "  hunter2  ".to_owned(),
@@ -106,11 +128,24 @@ mod tests {
         .normalised();
 
         assert_eq!(draft.title, "GitHub");
+        assert_eq!(draft.project, "Work");
         assert_eq!(draft.username, "octocat");
         assert_eq!(draft.password, "  hunter2  ", "passwords are not trimmed");
         assert_eq!(draft.url, "https://github.com");
         assert_eq!(draft.notes, " note ", "notes keep their formatting");
         assert_eq!(draft.totp, None, "a blank totp field means no totp");
+    }
+
+    #[test]
+    fn a_project_alone_is_not_an_entry() {
+        // A project name says where an entry would be filed; on its own it is still an
+        // empty entry, and saving it would create a password with nothing in it.
+        let draft = ItemDraft {
+            project: "Work".to_owned(),
+            ..ItemDraft::default()
+        };
+
+        assert!(draft.is_empty());
     }
 
     #[test]
@@ -127,5 +162,40 @@ mod tests {
         assert_eq!(item.title, "Old");
         assert_eq!(item.username, "");
         assert_eq!(item.totp, None);
+        assert_eq!(item.project, "", "an entry from before projects has none");
+    }
+
+    #[test]
+    fn a_draft_from_before_projects_still_parses() {
+        // The desktop form and any older page send exactly this, with no `project` key.
+        let json = r#"{
+            "title": "GitHub",
+            "username": "octocat",
+            "password": "s3cr3t",
+            "url": "https://github.com",
+            "notes": "",
+            "totp": null
+        }"#;
+        let draft: ItemDraft = serde_json::from_str(json).expect("forward compatible");
+        assert_eq!(draft.project, "");
+    }
+
+    #[test]
+    fn a_project_survives_a_draft_round_trip() {
+        let item = Item {
+            id: Uuid::from_u128(1),
+            vault_id: Uuid::from_u128(2),
+            title: "GitHub".to_owned(),
+            project: "Work".to_owned(),
+            username: "octocat".to_owned(),
+            password: "s3cr3t".to_owned(),
+            url: "https://github.com".to_owned(),
+            notes: String::new(),
+            totp: None,
+            created_at: 1,
+            updated_at: 2,
+        };
+
+        assert_eq!(item.draft().project, "Work");
     }
 }

@@ -71,6 +71,7 @@ for (const name of [
   'lock',
   'status',
   'list_items',
+  'list_projects',
   'reveal_item',
   'copy_password',
   'copy_username',

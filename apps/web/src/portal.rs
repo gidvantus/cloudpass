@@ -130,6 +130,9 @@ struct StatusDto {
 struct ItemSummary {
     id: String,
     title: String,
+    /// The project the entry is filed under, or empty. A name, not an identifier: projects
+    /// have no identity of their own anywhere in the system.
+    project: String,
     username: String,
     url: String,
     has_totp: bool,
@@ -433,6 +436,7 @@ pub fn list_items() -> Result<String, JsValue> {
                 pending: pending.contains(&item.id),
                 id: item.id.to_string(),
                 title: item.title,
+                project: item.project,
                 username: item.username,
                 url: item.url,
                 has_totp: item.totp.is_some(),
@@ -440,6 +444,19 @@ pub fn list_items() -> Result<String, JsValue> {
             .collect();
 
         encode(&items)
+    })
+}
+
+/// The project names in use, for the project list and the editor's suggestions.
+///
+/// A separate call rather than a field on `list_items`, so that the shape of the list the page
+/// renders stays an array of entries — that shape is what the smoke test asserts on.
+#[wasm_bindgen]
+pub fn list_projects() -> Result<String, JsValue> {
+    SESSION.with(|slot| {
+        let borrowed = slot.borrow();
+        let session = borrowed.as_ref().ok_or_else(busy)?;
+        encode(&session.vault.projects())
     })
 }
 
