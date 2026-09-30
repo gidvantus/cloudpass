@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#000000" />
+    <title>CloudPass — менеджер паролей</title>
+    <!-- A mark, so the browser does not ask for a `/favicon.ico` that does not exist. That
+         request is a 404 in the console, and a console with a permanent 404 in it is a console
+         nobody reads — which is where the real errors go to hide. -->
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <!-- Both subsets, fetched before the stylesheet asks for them. `crossorigin` is not
+         optional even though they are same-origin: a font request is CORS-mode, and without
+         it the preload is discarded and the font is fetched a second time. -->
+    <link
+      rel="preload"
+      href="fonts/montserrat-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="fonts/montserrat-cyrillic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <!-- Every screen is a `.view`; the router shows exactly one. Nothing here holds state
+         that matters — the wasm module does, and this file only asks it questions. -->
+    <div class="app" id="app" hidden>
+      <p class="banner" id="banner" hidden></p>
+
+      <!-- Лендинг ------------------------------------------------------------ -->
+      <div class="view" id="view-landing" hidden>
+        <header class="topbar">
+          <a class="wordmark" href="#/">CloudPass</a>
+          <nav class="topbar-nav">
+            <a class="link" href="#/login">Войти</a>
+          </nav>
+        </header>
+
+        <main class="landing">
+          <section class="hero">
+            <p class="eyebrow">Менеджер паролей</p>
+            <h1>Пароли, которые не&nbsp;прочитает никто, кроме вас.</h1>
+            <p class="lede">
+              Шифрование происходит в вашем браузере. Сервер получает только шифротекст
+              и не может его открыть — даже если захочет.
+            </p>
+            <div class="actions">
+              <a class="btn btn-solid" href="#/register">Создать аккаунт</a>
+              <a class="btn btn-outline" href="#/login">Войти</a>
+            </div>
+          </section>
+
+          <section class="principles">
+            <article class="principle">
+              <p class="principle-index">01</p>
+              <h2>Нулевое знание</h2>
+              <p>
+                Мастер-пароль не покидает устройство. Ключ выводится локально через
+                Argon2id, а сервер хранит только то, что не умеет расшифровывать.
+              </p>
+            </article>
+            <article class="principle">
+              <p class="principle-index">02</p>
+              <h2>Свой ключ на запись</h2>
+              <p>
+                AES-256-GCM и отдельный ключ для каждой записи. Связанные данные привязывают
+                шифротекст к месту и ревизии: подменить или перенести запись нельзя.
+              </p>
+            </article>
+            <article class="principle">
+              <p class="principle-index">03</p>
+              <h2>Возврат на бумаге</h2>
+              <p>
+                Emergency Kit с ключом восстановления — единственный путь назад. Этот ключ не
+                хранится нигде: ни на сервере, ни на вашем диске.
+              </p>
+            </article>
+          </section>
+
+          <section class="callout">
+            <h2>Начните с одного пароля.</h2>
+            <p>
+              Аккаунт создаётся за минуту. Мастер-пароль восстановить нельзя — сохраните
+              Emergency Kit, который выдаётся сразу после регистрации.
+            </p>
+            <a class="btn btn-inverse" href="#/register">Создать аккаунт</a>
+          </section>
+
+          <!-- Сборка для компьютера. Показывается только если сервер действительно
+               что-то раздаёт: ссылка на несуществующий файл хуже, чем её отсутствие. -->
+          <section class="desktop" id="desktop-block" hidden>
+            <div class="desktop-text">
+              <p class="eyebrow">Приложение для Windows</p>
+              <h2>То же хранилище, но на своём компьютере</h2>
+              <p class="lede">
+                Портал и приложение открывают один и тот же аккаунт: сохраните пароль
+                здесь — он появится там. Приложение не зависит от браузера и работает,
+                когда сервер недоступен.
+              </p>
+            </div>
+            <div class="desktop-download">
+              <a class="btn btn-solid" id="desktop-link" href="#" download>Скачать</a>
+              <p class="note" id="desktop-meta"></p>
+              <p class="fingerprint" id="desktop-hash" hidden></p>
+            </div>
+          </section>
+        </main>
+
+        <footer class="footer">
+          <span>CloudPass</span>
+          <span>Шифрование в браузере · сервер не читает данные</span>
+        </footer>
+      </div>
+
+      <!-- Регистрация -------------------------------------------------------- -->
+      <div class="view narrow" id="view-register" hidden>
+        <header class="topbar">
+          <a class="wordmark" href="#/">CloudPass</a>
+          <nav class="topbar-nav"><a class="link" href="#/">На главную</a></nav>
+        </header>
+
+        <main class="auth">
+          <p class="eyebrow">Регистрация</p>
+          <h1 class="auth-title">Создать аккаунт</h1>
+          <p class="lede">
+            Мастер-пароль — единственный ключ к хранилищу. Он не отправляется на сервер
+            и не хранится нигде.
+          </p>
+
+          <form class="form" id="register-form" autocomplete="off">
+            <div class="field">
+              <label class="field-label" for="register-identifier">Имя аккаунта</label>
+              <input
+                id="register-identifier"
+                type="text"
+                autocomplete="username"
+                spellcheck="false"
+                placeholder="alice@example.com"
+              />
+            </div>
+            <div class="field">
+              <label class="field-label" for="register-password">Мастер-пароль</label>
+              <input id="register-password" type="password" autocomplete="new-password" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="register-confirm">Повторите пароль</label>
+              <input id="register-confirm" type="password" autocomplete="new-password" />
+            </div>
+            <p class="note">Минимум 12 символов. Восстановить его нельзя.</p>
+            <button class="btn btn-solid btn-block" type="submit" id="register-submit">
+              Создать аккаунт
+            </button>
+          </form>
+
+          <p class="alt">
+            Уже есть аккаунт? <a class="link" href="#/login">Войти</a>
+          </p>
+        </main>
+      </div>
+
+      <!-- Вход --------------------------------------------------------------- -->
+      <div class="view narrow" id="view-login" hidden>
+        <header class="topbar">
+          <a class="wordmark" href="#/">CloudPass</a>
+          <nav class="topbar-nav"><a class="link" href="#/">На главную</a></nav>
+        </header>
+
+        <main class="auth">
+          <p class="eyebrow">Вход</p>
+          <h1 class="auth-title">Войти в хранилище</h1>
+          <p class="lede">
+            Хранилище расшифровывается здесь, в этой вкладке. Сервер отдаёт шифротекст
+            и ничего больше.
+          </p>
+
+          <form class="form" id="login-form" autocomplete="off">
+            <div class="field">
+              <label class="field-label" for="login-identifier">Имя аккаунта</label>
+              <input
+                id="login-identifier"
+                type="text"
+                autocomplete="username"
+                spellcheck="false"
+              />
+            </div>
+            <div class="field">
+              <label class="field-label" for="login-password">Мастер-пароль</label>
+              <input id="login-password" type="password" autocomplete="current-password" />
+            </div>
+            <button class="btn btn-solid btn-block" type="submit" id="login-submit">
+              Войти
+            </button>
+          </form>
+
+          <p class="alt">
+            Нет аккаунта? <a class="link" href="#/register">Создать</a>
+          </p>
+        </main>
+      </div>
+
+      <!-- Emergency Kit ------------------------------------------------------ -->
+      <div class="view medium" id="view-kit" hidden>
+        <header class="topbar">
+          <!-- No link out of here on purpose. The key exists only on this screen, so the
+               only way forward is the button that says it was saved. -->
+          <span class="wordmark">CloudPass</span>
+          <span class="who">Не закрывайте вкладку</span>
+        </header>
+
+        <main class="auth">
+          <p class="eyebrow">Emergency Kit</p>
+          <h1 class="auth-title">Сохраните ключ восстановления</h1>
+          <p class="lede">
+            Это единственная копия. Она существует только на этом экране — ни на сервере,
+            ни на диске её нет. Распечатайте документ или сохраните его в другом менеджере
+            паролей.
+          </p>
+
+          <pre class="kit" id="kit-text"></pre>
+
+          <div class="actions">
+            <button class="btn btn-solid" type="button" id="kit-copy">Скопировать</button>
+            <button class="btn btn-outline" type="button" id="kit-done">Я сохранил</button>
+          </div>
+        </main>
+      </div>
+
+      <!-- Хранилище ---------------------------------------------------------- -->
+      <div class="view" id="view-vault" hidden>
+        <header class="topbar">
+          <span class="wordmark">CloudPass</span>
+          <nav class="topbar-nav">
+            <span class="who" id="vault-who"></span>
+            <button class="btn btn-small btn-outline" type="button" id="vault-sync">
+              Синхронизировать
+            </button>
+            <button class="btn btn-small btn-solid" type="button" id="vault-add">
+              Добавить
+            </button>
+            <button class="btn btn-small btn-outline" type="button" id="vault-lock">
+              Заблокировать
+            </button>
+          </nav>
+        </header>
+
+        <main class="vault">
+          <p class="statusline" id="vault-status"></p>
+          <ul class="items" id="item-list"></ul>
+          <p class="empty" id="item-empty" hidden>Записей пока нет. Начните с «Добавить».</p>
+        </main>
+
+        <footer class="footer">
+          <span id="vault-foot-account"></span>
+          <span>Шифрование в браузере · сервер не читает данные</span>
+        </footer>
+      </div>
+
+      <!-- Запись ------------------------------------------------------------- -->
+      <div class="view medium" id="view-item" hidden>
+        <header class="topbar">
+          <a class="wordmark" href="#/vault">CloudPass</a>
+          <nav class="topbar-nav"><a class="link" href="#/vault">К хранилищу</a></nav>
+        </header>
+
+        <main class="auth">
+          <p class="eyebrow">Запись</p>
+          <h1 class="auth-title" id="item-title">Новая запись</h1>
+
+          <form class="form" id="item-form" autocomplete="off">
+            <input type="hidden" id="item-id" />
+
+            <div class="field">
+              <label class="field-label" for="item-name">Название</label>
+              <input id="item-name" type="text" spellcheck="false" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="item-username">Логин</label>
+              <input id="item-username" type="text" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="item-password">Пароль</label>
+              <div class="field-row">
+                <input id="item-password" type="password" autocomplete="off" spellcheck="false" />
+                <button class="btn btn-small btn-outline" type="button" id="item-reveal">
+                  Показать
+                </button>
+              </div>
+            </div>
+            <div class="field">
+              <label class="field-label" for="item-url">Адрес</label>
+              <input id="item-url" type="text" autocomplete="off" spellcheck="false" />
+            </div>
+            <div class="field">
+              <label class="field-label" for="item-notes">Заметки</label>
+              <textarea id="item-notes" rows="3" spellcheck="false"></textarea>
+            </div>
+
+            <div class="actions">
+              <button class="btn btn-solid" type="submit" id="item-submit">Сохранить</button>
+              <a class="btn btn-outline" href="#/vault">Отмена</a>
+              <button class="btn btn-outline btn-push" type="button" id="item-delete" hidden>
+                Удалить
+              </button>
+            </div>
+          </form>
+        </main>
+      </div>
+    </div>
+
+    <!-- Inert until the module is loaded: an «Add» button that does nothing because wasm
+         failed to fetch is worse than a line of text that says so. -->
+    <p class="boot" id="boot">Загрузка…</p>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

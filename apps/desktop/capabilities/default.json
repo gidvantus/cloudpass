@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Core window permissions only. No filesystem, shell, HTTP or clipboard plugin is granted: everything CloudPass needs goes through an explicit command, so a compromised frontend cannot reach the machine on its own.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

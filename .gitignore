@@ -1,0 +1,53 @@
+# Build artifacts
+/target
+**/target
+
+# Tauri generates permission schemas on every build; they are derived, not source.
+apps/desktop/gen/
+
+# The web portal's wasm module and its JavaScript glue. Derived, and large: run
+# `scripts/build-web.ps1` after a fresh checkout, or the server has nothing to serve.
+apps/web/ui/pkg/
+
+# The desktop installer, put here by `scripts/build-desktop.ps1` for the server to hand out.
+# The file is ignored; the directory is kept, because the Docker build copies it and an empty
+# directory means "nothing to offer" rather than a failure.
+apps/web/ui/download/*
+!apps/web/ui/download/.gitkeep
+
+# Vendored toolchain bootstrap (rustup-init.exe and friends)
+/.tools
+/.cargo
+/.rust
+
+# Node
+node_modules/
+dist/
+.pnpm-store/
+
+# Local secrets and env
+.env
+.env.*
+!.env.example
+
+# Local development database
+*.db
+*.db-shm
+*.db-wal
+
+# Editor / OS
+.vscode/
+.idea/
+*.suo
+Thumbs.db
+desktop.ini
+
+# Crash reporter logs emitted by the Node/Electron tooling
+debug.log
+
+# Rust debugging symbols from local builds
+*.pdb
+
+# NOTE: Cargo.lock is deliberately NOT ignored. This workspace ships binaries, and the
+# lock file is what makes a build reproducible from a reviewed dependency set — which
+# this project treats as a supply-chain control, not a convenience.

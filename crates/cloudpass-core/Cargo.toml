@@ -1,0 +1,45 @@
+[package]
+name = "cloudpass-core"
+description = "Cryptographic core of CloudPass. The only place where key material is handled."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+argon2 = { workspace = true }
+aes-gcm = { workspace = true }
+hkdf = { workspace = true }
+sha2 = { workspace = true }
+subtle = { workspace = true }
+zeroize = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+opaque-ke = { workspace = true }
+ed25519-dalek = { workspace = true }
+
+# Both halves are on by default so that a plain `cargo test` exercises the full
+# registration and login exchange. The web client is built with
+# `--no-default-features --features client`, which keeps the server-side code out of
+# the bundle that a browser has to trust. See README.md.
+[features]
+default = ["client", "server"]
+client = []
+server = []
+
+[[test]]
+name = "opaque"
+required-features = ["server"]
+
+[dev-dependencies]
+hex = { workspace = true }
+
+# In the browser there is no OS entropy source: randomness must come from
+# crypto.getRandomValues(). Without this feature getrandom refuses to compile for
+# wasm32-unknown-unknown, which is exactly the failure we want — a web client that
+# silently fell back to a weak RNG would be far worse than a build error.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }

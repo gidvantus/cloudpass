@@ -1,0 +1,57 @@
+[workspace]
+resolver = "2"
+members = [
+    "apps/desktop",
+    "apps/web",
+    "crates/cloudpass-client",
+    "crates/cloudpass-core",
+    "crates/cloudpass-server",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "proprietary"
+
+[workspace.dependencies]
+argon2 = "0.5"
+aes-gcm = "0.10"
+hkdf = "0.12"
+sha2 = "0.10"
+subtle = "2.5"
+zeroize = { version = "1.7", features = ["derive"] }
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["serde"] }
+thiserror = "1"
+hex = "0.4"
+opaque-ke = { version = "4.0", features = ["ristretto255"] }
+
+# Device identity and vault-head signatures. Already in the dependency tree through
+# opaque-ke's curve25519 dependency, so this adds no second elliptic-curve stack.
+ed25519-dalek = "2"
+
+# Server side. sqlx is pinned to the SQLite driver with default features off, and
+# deliberately without the `migrate` feature: that one pulls `sqlx-macros`, which in
+# turn brings in the MySQL and Postgres drivers. The schema is applied with
+# `raw_sql` instead, which keeps the dependency tree small — a supply-chain win, and
+# this project treats that as a security property, not a nicety.
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio",
+    "sqlite",
+] }
+tower = { version = "0.5", features = ["util"] }
+base64 = "0.22"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

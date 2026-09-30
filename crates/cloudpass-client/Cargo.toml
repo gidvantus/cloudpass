@@ -1,0 +1,26 @@
+[package]
+name = "cloudpass-client"
+description = "Client-side vault logic: account material, encrypted items, local storage."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+cloudpass-core = { path = "../cloudpass-core" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+zeroize = { workspace = true }
+base64 = { workspace = true }
+sha2 = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+serde_json = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# Only for the clock. `std::time::SystemTime::now()` panics on wasm32-unknown-unknown —
+# the platform has no time source to read — so the browser is asked directly instead.
+js-sys = "0.3"

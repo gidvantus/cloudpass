@@ -1,0 +1,42 @@
+[package]
+name = "cloudpass-web"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+# The web portal: the same vault, in a browser tab.
+#
+# Everything in `src` is gated on `target_arch = "wasm32"`, and every dependency that
+# only makes sense in a browser is listed under the target section below. That keeps
+# `cargo build --workspace` on the host from pulling a browser stack into a desktop or
+# server build, and keeps the feature unification honest: `getrandom`'s `js` backend is
+# enabled for wasm, where the browser's CSPRNG is the only source of randomness there is,
+# and not for anything else.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cloudpass-client = { path = "../../crates/cloudpass-client" }
+cloudpass-core = { path = "../../crates/cloudpass-core" }
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+zeroize.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = [
+    "Headers",
+    "Request",
+    "RequestInit",
+    "Response",
+] }
+
+# `rand` reaches `getrandom`, which on wasm32-unknown-unknown refuses to build without a
+# backend. This one draws from `crypto.getRandomValues` — the only CSPRNG a browser has,
+# and the right one to use.
+getrandom = { version = "0.2", features = ["js"] }

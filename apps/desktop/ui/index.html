@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CloudPass</title>
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="masthead">
+        <h1>CloudPass</h1>
+        <p class="status" id="status">starting…</p>
+      </header>
+
+      <p class="banner" id="banner" hidden></p>
+
+      <!-- Account setup ------------------------------------------------------ -->
+      <section class="panel" id="create-panel" hidden>
+        <h2>Create a vault</h2>
+        <p class="hint">
+          The master password is stretched with Argon2id on this machine and never leaves
+          it. It cannot be recovered — lose it and the vault is gone.
+        </p>
+        <form id="create-form" autocomplete="off">
+          <label for="create-identifier">Account name</label>
+          <input id="create-identifier" type="text" autocomplete="username" spellcheck="false" />
+          <label for="create-password">Master password</label>
+          <input id="create-password" type="password" autocomplete="new-password" />
+          <label for="create-confirm">Repeat it</label>
+          <input id="create-confirm" type="password" autocomplete="new-password" />
+          <button type="submit" id="create-submit">Create</button>
+        </form>
+        <p class="hint">
+          Already have an account — for example one you created in the web portal?
+          <button type="button" class="link" id="show-join">Sign in on this machine</button>
+        </p>
+      </section>
+
+      <!-- Join an account that exists on the server --------------------------- -->
+      <section class="panel" id="join-panel" hidden>
+        <h2>Sign in to an existing account</h2>
+        <p class="hint">
+          Enter the account name and master password you registered with. Everything on
+          the server is ciphertext, so it is these two things — not a copied file — that
+          make this machine able to read your vault. This machine gets its own device key;
+          nothing is copied from the other one.
+        </p>
+        <form id="join-form" autocomplete="off">
+          <label for="join-identifier">Account name</label>
+          <input id="join-identifier" type="text" autocomplete="username" spellcheck="false" />
+          <label for="join-password">Master password</label>
+          <input id="join-password" type="password" autocomplete="current-password" />
+          <div class="row-actions">
+            <button type="submit" id="join-submit">Sign in</button>
+            <button type="button" class="secondary" id="join-cancel">Back</button>
+          </div>
+        </form>
+        <p class="hint">
+          This is the first time this machine has met the server, so it has to take the
+          server's key on trust at this moment. Every later sign-in is checked against it.
+        </p>
+      </section>
+
+      <!-- Unlock ------------------------------------------------------------- -->
+      <section class="panel" id="unlock-panel" hidden>
+        <h2>Unlock</h2>
+        <p class="hint">The key is derived here. Nothing is sent anywhere.</p>
+        <form id="unlock-form" autocomplete="off">
+          <label for="unlock-password">Master password</label>
+          <input id="unlock-password" type="password" autocomplete="current-password" />
+          <button type="submit" id="unlock-submit">Unlock</button>
+        </form>
+        <p class="hint" id="recover-hint">
+          Forgotten the master password?
+          <button type="button" class="link" id="show-recover">Use a recovery key</button>
+        </p>
+      </section>
+
+      <!-- Recovery ----------------------------------------------------------- -->
+      <section class="panel" id="recover-panel" hidden>
+        <h2>Recover with the Emergency Kit</h2>
+        <p class="hint">
+          Type the recovery key exactly as it appears on the kit. Capitalisation and
+          dashes do not matter. The kit keeps no copy of your passwords and neither does
+          this screen: the vault is decrypted on this machine, as always.
+        </p>
+        <form id="recover-form" autocomplete="off">
+          <label for="recover-key">Recovery key</label>
+          <input id="recover-key" type="text" spellcheck="false" autocomplete="off" />
+          <label for="recover-password">New master password</label>
+          <input id="recover-password" type="password" autocomplete="new-password" />
+          <label for="recover-confirm">Repeat it</label>
+          <input id="recover-confirm" type="password" autocomplete="new-password" />
+          <div class="row-actions">
+            <button type="submit" id="recover-submit">Recover</button>
+            <button type="button" class="secondary" id="recover-cancel">Cancel</button>
+          </div>
+        </form>
+        <p class="hint">
+          A recovery issues a new Emergency Kit and retires the old one. The key you have
+          just used will not work again.
+        </p>
+      </section>
+
+      <!-- Emergency Kit ------------------------------------------------------ -->
+      <section class="panel" id="kit-panel" hidden>
+        <h2 id="kit-title">Your Emergency Kit</h2>
+        <p class="hint">
+          This is the only copy. It is stored nowhere — not on this machine, not on the
+          server — so print it, or copy it into another password manager, before you
+          close this screen. Anyone who has the recovery key can open the vault.
+        </p>
+        <pre class="kit" id="kit-text"></pre>
+        <div class="row-actions">
+          <button type="button" id="kit-copy">Copy</button>
+          <button type="button" class="secondary" id="kit-done">I have saved it</button>
+        </div>
+      </section>
+
+      <!-- Security ----------------------------------------------------------- -->
+      <section class="panel" id="security-panel" hidden>
+        <h2>Security</h2>
+
+        <h3>Change the master password</h3>
+        <p class="hint">
+          Re-wraps the vault key, on this machine and on the server, so the new password
+          works everywhere. Your Emergency Kit keeps working: the recovery key does not
+          depend on the password.
+        </p>
+        <form id="password-form" autocomplete="off">
+          <label for="password-current">Current password</label>
+          <input id="password-current" type="password" autocomplete="current-password" />
+          <label for="password-new">New password</label>
+          <input id="password-new" type="password" autocomplete="new-password" />
+          <label for="password-confirm">Repeat it</label>
+          <input id="password-confirm" type="password" autocomplete="new-password" />
+          <div class="row-actions">
+            <button type="submit" id="password-submit">Change password</button>
+            <button type="button" class="secondary" id="security-cancel">Back</button>
+          </div>
+        </form>
+
+        <h3>Emergency Kit</h3>
+        <p class="hint">
+          Issuing a new kit retires the old one immediately: the recovery key on the old
+          piece of paper stops working the moment this succeeds. Do it if the kit has
+          been read aloud, photographed, or left somewhere it should not have been.
+        </p>
+        <form id="new-kit-form" autocomplete="off">
+          <label for="kit-password">Master password</label>
+          <input id="kit-password" type="password" autocomplete="current-password" />
+          <button type="submit" id="new-kit-submit">Issue a new kit</button>
+        </form>
+      </section>
+
+      <!-- Vault -------------------------------------------------------------- -->
+      <section class="panel" id="vault-panel" hidden>
+        <div class="row">
+          <h2>Items</h2>
+          <div class="row-actions">
+            <button type="button" id="sync-now">Sync</button>
+            <button type="button" id="add-item">Add</button>
+            <button type="button" class="secondary" id="show-security">Security</button>
+            <button type="button" class="secondary" id="lock-vault">Lock</button>
+          </div>
+        </div>
+        <p class="hint" id="sync-note"></p>
+        <ul class="item-list" id="item-list"></ul>
+        <p class="hint" id="empty-hint" hidden>No items yet. Use “Add”.</p>
+      </section>
+
+      <!-- Editor ------------------------------------------------------------- -->
+      <section class="panel" id="editor-panel" hidden>
+        <h2 id="editor-title">Add an item</h2>
+        <form id="editor-form" autocomplete="off">
+          <input type="hidden" id="editor-id" />
+          <label for="editor-name">Title</label>
+          <input id="editor-name" type="text" spellcheck="false" />
+          <label for="editor-username">Username</label>
+          <input id="editor-username" type="text" autocomplete="off" spellcheck="false" />
+          <label for="editor-password">Password</label>
+          <input id="editor-password" type="text" autocomplete="off" spellcheck="false" />
+          <label for="editor-url">URL</label>
+          <input id="editor-url" type="text" autocomplete="off" spellcheck="false" />
+          <label for="editor-notes">Notes</label>
+          <textarea id="editor-notes" rows="3" spellcheck="false"></textarea>
+          <div class="row-actions">
+            <button type="submit" id="editor-submit">Save</button>
+            <button type="button" class="secondary" id="editor-cancel">Cancel</button>
+            <button type="button" class="danger" id="editor-delete" hidden>Delete</button>
+          </div>
+        </form>
+      </section>
+
+      <footer class="footer" id="footer"></footer>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

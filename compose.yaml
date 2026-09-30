@@ -1,0 +1,47 @@
+# CloudPass, running locally: the sync server and the web portal it serves.
+#
+#   docker compose up --build
+#   → http://localhost:8090
+#
+# The first build compiles the whole dependency tree and takes several minutes. Later builds
+# reuse the cargo caches mounted in the Dockerfile, so a change to `crates/` or `apps/web/`
+# recompiles only what moved.
+
+services:
+  cloudpass:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cloudpass:local
+    container_name: cloudpass
+
+    ports:
+      # Loopback only, on purpose. `localhost` is a secure context, which is what the
+      # browser's Clipboard API requires — the hidden-copy button works here and would
+      # silently refuse on `http://<lan-ip>:...`. Widening this is a decision about TLS,
+      # not about convenience: put a reverse proxy in front first.
+      #
+      # 8090 rather than the conventional 8080 because 8080 is one of the most contested
+      # ports on a developer machine. The port *inside* the container is always 8080; only
+      # this host-side number changes, and it can be overridden without editing the file:
+      #
+      #   $env:CLOUDPASS_PORT=8080; docker compose up -d      # PowerShell
+      #   CLOUDPASS_PORT=8080 docker compose up -d            # POSIX shell
+      - "127.0.0.1:${CLOUDPASS_PORT:-8090}:8080"
+
+    volumes:
+      # The account, its encrypted items and the server's OPAQUE setup. Losing this volume
+      # loses every account on this server, so it is the one thing worth backing up.
+      - cloudpass-data:/data
+
+    environment:
+      # Set to "0" to close registration once your own account exists. That is the cheapest
+      # available defence against a stranger creating an account on a server that is
+      # reachable from anywhere.
+      CLOUDPASS_REGISTRATION_OPEN: "1"
+      RUST_LOG: info
+
+    restart: unless-stopped
+
+volumes:
+  cloudpass-data:

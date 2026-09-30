@@ -1,0 +1,261 @@
+:root {
+  color-scheme: dark;
+  --background: #0f172a;
+  --surface: #1e293b;
+  --border: #334155;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --accent: #60a5fa;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--text);
+  font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
+}
+
+.shell {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 24px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.masthead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+}
+
+h1 {
+  font-size: 20px;
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+
+h2 {
+  font-size: 15px;
+  margin: 0 0 4px;
+  color: var(--accent);
+}
+
+h3 {
+  font-size: 14px;
+  margin: 20px 0 4px;
+  color: var(--text);
+}
+
+.panel > h3:first-of-type {
+  margin-top: 12px;
+}
+
+/* Two forms in one panel: separate them, so "which button submits what" is visible. */
+.panel > form + h3 {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.status {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 20px 20px;
+}
+
+.hint {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+input {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #0b1220;
+  color: var(--text);
+  font-size: 15px;
+}
+
+input:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+button {
+  margin-top: 4px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #0b1220;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.footer {
+  font-size: 12px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* --- messages -------------------------------------------------------------- */
+
+.banner {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #7f1d1d;
+  background: #450a0a;
+  color: #fecaca;
+  font-size: 14px;
+}
+
+/* --- layout helpers -------------------------------------------------------- */
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.row h2 {
+  margin: 0;
+}
+
+.row-actions {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  margin-top: 0;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+button.danger {
+  background: transparent;
+  color: #fca5a5;
+  border: 1px solid #7f1d1d;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+textarea {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #0b1220;
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
+/* --- item list ------------------------------------------------------------- */
+.item-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.item-button {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  background: #0b1220;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-align: left;
+  font-weight: 500;
+}
+
+.item-title {
+  font-size: 15px;
+}
+
+.item-subtitle {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* --- emergency kit --------------------------------------------------------- */
+
+button.link {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.kit {
+  margin: 0 0 12px;
+  padding: 14px;
+  background: #0b1220;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  /* Monospace, and it wraps: a recovery key that overflows the panel is a key someone
+     copies half of. */
+  font: 13px/1.6 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: all;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
