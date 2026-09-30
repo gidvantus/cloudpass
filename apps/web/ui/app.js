@@ -16,6 +16,7 @@ import init, {
   lock,
   status,
   list_items,
+  list_projects,
   reveal_item,
   copy_password,
   copy_username,
@@ -79,6 +80,18 @@ let unlocked = false;
 let kitPending = false;
 let shown = null;
 
+/** Everything the last list fetch returned, kept so that filtering does not need a round trip. */
+let items = [];
+let projects = [];
+/**
+ * Which project the password list is showing.
+ *
+ * `null` means every entry; `''` means the ones filed under no project at all. Those are two
+ * different questions and collapsing them — by using `''` for "all", say — would make it
+ * impossible to ask for the ungrouped ones.
+ */
+let selectedProject = null;
+
 // --- plumbing ---------------------------------------------------------------
 
 function complain(message) {
@@ -125,6 +138,10 @@ function show(name) {
   for (const [key, element] of Object.entries(views)) {
     element.hidden = key !== name;
   }
+
+  // Before the early return: the header answers "is this tab signed in?", and that can change
+  // without the screen changing — locking and immediately landing back here, for instance.
+  renderAuthAction();
 
   if (shown === name) {
     return;
@@ -180,6 +197,36 @@ async function copyText(text) {
 }
 
 // --- routing ----------------------------------------------------------------
+
+/**
+ * The header's one control: «Войти» while the vault is shut, «Выйти» once it is open.
+ *
+ * It reads `unlocked`, which the module owns, rather than a copy kept here, so there is one
+ * answer to "is this tab signed in?" and the header cannot drift away from the screens.
+ */
+function renderAuthAction() {
+  const action = byId('topbar-auth');
+  action.textContent = unlocked ? 'Выйти' : 'Войти';
+  action.dataset.action = unlocked ? 'sign-out' : 'sign-in';
+}
+
+/**
+ * Ends the session and returns to the landing page.
+ *
+ * Locking the wasm module is what actually signs the user out — it drops the vault and every
+ * key with it. The page's own copies go too, so a stale list cannot be painted over the top of
+ * a signed-out screen by a render that was already in flight.
+ */
+async function signOut() {
+  dismiss();
+  wipeSecretFields();
+  await lock();
+  unlocked = false;
+  items = [];
+  projects = [];
+  selectedProject = null;
+  go('#/');
+}
 
 function parseRoute() {
   const raw = window.location.hash.replace(/^#\/?/, '');
@@ -268,17 +315,114 @@ async function loadVault() {
   byId('vault-foot-account').textContent = state.identifier || '';
   byId('vault-status').textContent = state.last_sync || '';
 
-  renderItems(JSON.parse(await list_items()));
+  items = JSON.parse(await list_items());
+  projects = JSON.parse(await list_projects());
+
+  // A project exists exactly as long as an entry is filed under it, so the selected one can
+  // stop existing between two loads. Falling back to «Все пароли» is the only honest answer:
+  // the alternative is an empty list and nothing on screen to click away from.
+  if (selectedProject && !projects.includes(selectedProject)) {
+    selectedProject = null;
+  }
+
+  renderProjects();
+  renderItems();
 }
 
-function renderItems(items) {
+/**
+ * The project list, and with it the choice of what the password list shows.
+ *
+ * «Все пароли» is always first, because it is what a person wants most of the time and because
+ * a list that can be left with nothing selected has to offer a way back.
+ */
+function renderProjects() {
+  const list = byId('project-list');
+  list.replaceChildren();
+
+  list.append(projectRow('Все пароли', items.length, null));
+
+  for (const name of projects) {
+    list.append(projectRow(name, items.filter((item) => item.project === name).length, name));
+  }
+
+  // Only offered when it would actually show something. An «Без проекта» row that leads to an
+  // empty list is a worse answer than not offering it at all.
+  const ungrouped = items.filter((item) => !item.project).length;
+  if (ungrouped > 0) {
+    list.append(projectRow('Без проекта', ungrouped, ''));
+  }
+
+  byId('project-empty').hidden = projects.length > 0;
+}
+
+function projectRow(label, count, value) {
+  const row = document.createElement('li');
+  row.className = 'project';
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'project-button';
+  button.setAttribute('data-testid', 'project');
+  // Three different rows, told apart by this attribute alone: «Все пароли» has no `data-project`
+  // at all, a named project carries its name, and «Без проекта» carries the empty string. The
+  // absent attribute is what keeps "everything" from looking identical to "filed under nothing".
+  if (value !== null) {
+    button.setAttribute('data-project', value);
+  }
+  // The state is on the element as `aria-current`, not as a class: it is a statement about
+  // what the list is showing, and there is exactly one such element at any moment.
+  button.setAttribute('aria-current', String(selectedProject === value));
+
+  const name = document.createElement('span');
+  name.textContent = label;
+  button.append(name);
+
+  const badge = document.createElement('span');
+  badge.className = 'project-count';
+  badge.textContent = String(count);
+  button.append(badge);
+
+  button.addEventListener('click', () => {
+    selectedProject = value;
+    renderProjects();
+    renderItems();
+  });
+
+  row.append(button);
+  return row;
+}
+
+/** Whether an entry belongs to what the project list currently has selected. */
+function matchesSelection(item) {
+  if (selectedProject === null) {
+    return true;
+  }
+  return (item.project || '') === selectedProject;
+}
+
+function renderItems() {
   const list = byId('item-list');
   list.replaceChildren();
-  byId('item-empty').hidden = items.length > 0;
 
-  for (const item of items) {
+  const visible = items.filter(matchesSelection);
+  byId('item-empty').hidden = visible.length > 0;
+  byId('item-empty').textContent =
+    selectedProject === null
+      ? 'Записей пока нет. Начните с «Добавить».'
+      : 'В этом проекте пока пусто. Нажмите «Добавить», чтобы положить сюда запись.';
+
+  byId('item-scope').textContent =
+    selectedProject === null
+      ? ''
+      : selectedProject === ''
+        ? 'без проекта'
+        : selectedProject;
+
+  for (const item of visible) {
     const row = document.createElement('li');
     row.className = 'item';
+    row.setAttribute('data-testid', 'item-row');
+    row.setAttribute('data-item-id', item.id);
 
     const text = document.createElement('div');
     text.className = 'item-text';
@@ -287,6 +431,16 @@ function renderItems(items) {
     title.className = 'item-title';
     title.textContent = item.title || '(без названия)';
     text.append(title);
+
+    // Only worth a badge when the list is showing more than one project; inside a single
+    // project every row would carry the same three words.
+    if (selectedProject === null && item.project) {
+      const badge = document.createElement('span');
+      badge.className = 'item-project';
+      badge.setAttribute('data-testid', 'item-project-badge');
+      badge.textContent = item.project;
+      text.append(badge);
+    }
 
     const sub = document.createElement('span');
     sub.className = 'item-sub';
@@ -305,7 +459,7 @@ function renderItems(items) {
     // The button that matters: the password goes from the vault to the clipboard inside the
     // wasm module and never appears in this file or in the document.
     actions.append(
-      actionButton('Скопировать', 'btn-solid', async (button) => {
+      actionButton('Скопировать', 'btn-solid', 'copy-password', async (button) => {
         await copy_password(item.id);
         flash(button, 'Скопировано');
       }),
@@ -313,24 +467,27 @@ function renderItems(items) {
 
     if (item.username) {
       actions.append(
-        actionButton('Логин', 'btn-outline', async (button) => {
+        actionButton('Логин', 'btn-outline', 'copy-username', async (button) => {
           await copy_username(item.id);
           flash(button, 'Скопировано');
         }),
       );
     }
 
-    actions.append(actionButton('Открыть', 'btn-outline', () => go(`#/item/${item.id}`)));
+    actions.append(
+      actionButton('Открыть', 'btn-outline', 'open-item', () => go(`#/item/${item.id}`)),
+    );
 
     row.append(actions);
     list.append(row);
   }
 }
 
-function actionButton(label, variant, onClick) {
+function actionButton(label, variant, testId, onClick) {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = `btn btn-small ${variant}`;
+  button.setAttribute('data-testid', testId);
   button.textContent = label;
   button.addEventListener('click', async () => {
     dismiss();
@@ -351,11 +508,14 @@ async function loadItem(id) {
   byId('item-password').type = 'password';
   byId('item-reveal').textContent = 'Показать';
 
+  projects = await loadProjectNames();
+
   if (id && id !== 'new') {
     // The one place a secret crosses into this file, for one entry, on purpose.
     const item = JSON.parse(await reveal_item(id));
     byId('item-id').value = id;
     byId('item-name').value = item.title;
+    byId('item-project').value = item.project || '';
     byId('item-username').value = item.username;
     byId('item-password').value = item.password;
     byId('item-url').value = item.url;
@@ -364,14 +524,46 @@ async function loadItem(id) {
     byId('item-delete').hidden = false;
   } else {
     byId('item-id').value = '';
+    // A new entry lands in whatever project the cabinet was showing. That is the whole point
+    // of picking one before pressing «Добавить» — otherwise the choice would be decoration.
+    byId('item-project').value = selectedProject || '';
     byId('item-title').textContent = 'Новая запись';
     byId('item-delete').hidden = true;
+  }
+
+  renderProjectOptions();
+}
+
+/**
+ * The project names already in use, or none if they cannot be read.
+ *
+ * They are only a suggestion for the project field, so a failure here must not be able to
+ * stop someone from saving a password.
+ */
+async function loadProjectNames() {
+  try {
+    return JSON.parse(await list_projects());
+  } catch {
+    return [];
+  }
+}
+
+/** Offers the names already in use, without preventing a new one from being typed. */
+function renderProjectOptions() {
+  const options = byId('project-options');
+  options.replaceChildren();
+
+  for (const name of projects) {
+    const option = document.createElement('option');
+    option.value = name;
+    options.append(option);
   }
 }
 
 function currentDraft() {
   return {
     title: byId('item-name').value,
+    project: byId('item-project').value,
     username: byId('item-username').value,
     password: byId('item-password').value,
     url: byId('item-url').value,
@@ -468,12 +660,15 @@ byId('vault-sync').addEventListener('click', async () => {
 
 byId('vault-add').addEventListener('click', () => go('#/item/new'));
 
-byId('vault-lock').addEventListener('click', async () => {
-  dismiss();
-  wipeSecretFields();
-  await lock();
-  unlocked = false;
-  go('#/');
+byId('vault-lock').addEventListener('click', signOut);
+
+// The header control, whichever of the two things it currently is.
+byId('topbar-auth').addEventListener('click', async () => {
+  if (unlocked) {
+    await signOut().catch((error) => complain(describe(error)));
+    return;
+  }
+  go('#/login');
 });
 
 byId('item-reveal').addEventListener('click', () => {

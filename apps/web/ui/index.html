@@ -41,7 +41,12 @@
         <header class="topbar">
           <a class="wordmark" href="#/">CloudPass</a>
           <nav class="topbar-nav">
-            <a class="link" href="#/login">Войти</a>
+            <!-- One button, two meanings, decided by the session rather than by the markup:
+                 «Войти» while the vault is shut, «Выйти» once it is open. A hard-coded link
+                 here is what used to offer «Войти» to someone already signed in. -->
+            <button class="link link-button" type="button" id="topbar-auth" data-testid="topbar-auth">
+              Войти
+            </button>
           </nav>
         </header>
 
@@ -145,18 +150,34 @@
                 autocomplete="username"
                 spellcheck="false"
                 placeholder="alice@example.com"
+                data-testid="register-identifier"
               />
             </div>
             <div class="field">
               <label class="field-label" for="register-password">Мастер-пароль</label>
-              <input id="register-password" type="password" autocomplete="new-password" />
+              <input
+                id="register-password"
+                type="password"
+                autocomplete="new-password"
+                data-testid="register-password"
+              />
             </div>
             <div class="field">
               <label class="field-label" for="register-confirm">Повторите пароль</label>
-              <input id="register-confirm" type="password" autocomplete="new-password" />
+              <input
+                id="register-confirm"
+                type="password"
+                autocomplete="new-password"
+                data-testid="register-confirm"
+              />
             </div>
             <p class="note">Минимум 12 символов. Восстановить его нельзя.</p>
-            <button class="btn btn-solid btn-block" type="submit" id="register-submit">
+            <button
+              class="btn btn-solid btn-block"
+              type="submit"
+              id="register-submit"
+              data-testid="register-submit"
+            >
               Создать аккаунт
             </button>
           </form>
@@ -190,13 +211,24 @@
                 type="text"
                 autocomplete="username"
                 spellcheck="false"
+                data-testid="login-identifier"
               />
             </div>
             <div class="field">
               <label class="field-label" for="login-password">Мастер-пароль</label>
-              <input id="login-password" type="password" autocomplete="current-password" />
+              <input
+                id="login-password"
+                type="password"
+                autocomplete="current-password"
+                data-testid="login-password"
+              />
             </div>
-            <button class="btn btn-solid btn-block" type="submit" id="login-submit">
+            <button
+              class="btn btn-solid btn-block"
+              type="submit"
+              id="login-submit"
+              data-testid="login-submit"
+            >
               Войти
             </button>
           </form>
@@ -225,11 +257,15 @@
             паролей.
           </p>
 
-          <pre class="kit" id="kit-text"></pre>
+          <pre class="kit" id="kit-text" data-testid="kit-text"></pre>
 
           <div class="actions">
-            <button class="btn btn-solid" type="button" id="kit-copy">Скопировать</button>
-            <button class="btn btn-outline" type="button" id="kit-done">Я сохранил</button>
+            <button class="btn btn-solid" type="button" id="kit-copy" data-testid="kit-copy">
+              Скопировать
+            </button>
+            <button class="btn btn-outline" type="button" id="kit-done" data-testid="kit-done">
+              Я сохранил
+            </button>
           </div>
         </main>
       </div>
@@ -239,23 +275,58 @@
         <header class="topbar">
           <span class="wordmark">CloudPass</span>
           <nav class="topbar-nav">
-            <span class="who" id="vault-who"></span>
-            <button class="btn btn-small btn-outline" type="button" id="vault-sync">
+            <span class="who" id="vault-who" data-testid="vault-who"></span>
+            <button
+              class="btn btn-small btn-outline"
+              type="button"
+              id="vault-sync"
+              data-testid="vault-sync"
+            >
               Синхронизировать
             </button>
-            <button class="btn btn-small btn-solid" type="button" id="vault-add">
+            <button class="btn btn-small btn-solid" type="button" id="vault-add" data-testid="vault-add">
               Добавить
             </button>
-            <button class="btn btn-small btn-outline" type="button" id="vault-lock">
-              Заблокировать
+            <!-- Locking the tab *is* signing out here: the module holds nothing between page
+                 loads, so the two words mean the same thing to a person using the portal. -->
+            <button
+              class="btn btn-small btn-outline"
+              type="button"
+              id="vault-lock"
+              data-testid="vault-logout"
+            >
+              Выйти
             </button>
           </nav>
         </header>
 
         <main class="vault">
-          <p class="statusline" id="vault-status"></p>
-          <ul class="items" id="item-list"></ul>
-          <p class="empty" id="item-empty" hidden>Записей пока нет. Начните с «Добавить».</p>
+          <p class="statusline" id="vault-status" data-testid="vault-status"></p>
+
+          <!-- The cabinet: two lists, side by side. Projects on the left choose what the
+               password list on the right is showing, which is the whole reason projects
+               exist — a single flat list stops being readable long before it stops being
+               correct. -->
+          <div class="cabinet">
+            <section class="panel" data-testid="panel-projects">
+              <h2 class="panel-title">Проекты</h2>
+              <ul class="projects" id="project-list" data-testid="project-list"></ul>
+              <p class="empty" id="project-empty" hidden data-testid="project-empty">
+                Проектов пока нет. Назовите проект в записи — он появится здесь.
+              </p>
+            </section>
+
+            <section class="panel" data-testid="panel-passwords">
+              <div class="panel-head">
+                <h2 class="panel-title">Пароли</h2>
+                <span class="panel-scope" id="item-scope" data-testid="item-scope"></span>
+              </div>
+              <ul class="items" id="item-list" data-testid="item-list"></ul>
+              <p class="empty" id="item-empty" hidden data-testid="item-empty">
+                Записей пока нет. Начните с «Добавить».
+              </p>
+            </section>
+          </div>
         </main>
 
         <footer class="footer">
@@ -280,34 +351,82 @@
 
             <div class="field">
               <label class="field-label" for="item-name">Название</label>
-              <input id="item-name" type="text" spellcheck="false" />
+              <input id="item-name" type="text" spellcheck="false" data-testid="item-name" />
+            </div>
+            <!-- A project is nothing but a name filed inside the sealed record, so this is a
+                 free-text field with the names already in use offered as suggestions. It is
+                 deliberately not a `<select>`: a new project has to be creatable right here,
+                 at the moment a password is saved, or nobody will ever create one. -->
+            <div class="field">
+              <label class="field-label" for="item-project">Проект</label>
+              <input
+                id="item-project"
+                type="text"
+                list="project-options"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="Без проекта"
+                data-testid="item-project"
+              />
+              <datalist id="project-options"></datalist>
             </div>
             <div class="field">
               <label class="field-label" for="item-username">Логин</label>
-              <input id="item-username" type="text" autocomplete="off" spellcheck="false" />
+              <input
+                id="item-username"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                data-testid="item-username"
+              />
             </div>
             <div class="field">
               <label class="field-label" for="item-password">Пароль</label>
               <div class="field-row">
-                <input id="item-password" type="password" autocomplete="off" spellcheck="false" />
-                <button class="btn btn-small btn-outline" type="button" id="item-reveal">
+                <input
+                  id="item-password"
+                  type="password"
+                  autocomplete="off"
+                  spellcheck="false"
+                  data-testid="item-password"
+                />
+                <button
+                  class="btn btn-small btn-outline"
+                  type="button"
+                  id="item-reveal"
+                  data-testid="item-reveal"
+                >
                   Показать
                 </button>
               </div>
             </div>
             <div class="field">
               <label class="field-label" for="item-url">Адрес</label>
-              <input id="item-url" type="text" autocomplete="off" spellcheck="false" />
+              <input
+                id="item-url"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                data-testid="item-url"
+              />
             </div>
             <div class="field">
               <label class="field-label" for="item-notes">Заметки</label>
-              <textarea id="item-notes" rows="3" spellcheck="false"></textarea>
+              <textarea id="item-notes" rows="3" spellcheck="false" data-testid="item-notes"></textarea>
             </div>
 
             <div class="actions">
-              <button class="btn btn-solid" type="submit" id="item-submit">Сохранить</button>
+              <button class="btn btn-solid" type="submit" id="item-submit" data-testid="item-submit">
+                Сохранить
+              </button>
               <a class="btn btn-outline" href="#/vault">Отмена</a>
-              <button class="btn btn-outline btn-push" type="button" id="item-delete" hidden>
+              <button
+                class="btn btn-outline btn-push"
+                type="button"
+                id="item-delete"
+                data-testid="item-delete"
+                hidden
+              >
                 Удалить
               </button>
             </div>

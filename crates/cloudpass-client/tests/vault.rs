@@ -19,6 +19,7 @@ fn params() -> KdfParams {
 fn draft(title: &str, password: &str) -> ItemDraft {
     ItemDraft {
         title: title.to_owned(),
+        project: String::new(),
         username: "octocat".to_owned(),
         password: password.to_owned(),
         url: "https://github.com".to_owned(),
@@ -163,6 +164,128 @@ fn items_are_listed_in_a_stable_case_insensitive_order() {
 
     let titles: Vec<String> = vault.items().into_iter().map(|item| item.title).collect();
     assert_eq!(titles, vec!["Alpha", "beta", "Gamma", "zeta"]);
+}
+
+// ---------------------------------------------------------------------------
+// Projects
+// ---------------------------------------------------------------------------
+
+/// The same draft, filed under a project.
+fn draft_in(title: &str, project: &str) -> ItemDraft {
+    ItemDraft {
+        project: project.to_owned(),
+        ..draft(title, "x")
+    }
+}
+
+#[test]
+fn projects_are_the_names_in_use_and_nothing_else() {
+    let mut store = MemoryStore::new();
+    let (mut vault, _) = Vault::create(&mut store, IDENTIFIER, PASSWORD, params()).expect("create");
+
+    vault
+        .add_item(&mut store, draft_in("A", "Work"))
+        .expect("add");
+    vault
+        .add_item(&mut store, draft_in("B", "Work"))
+        .expect("add");
+    vault
+        .add_item(&mut store, draft_in("C", "Home"))
+        .expect("add");
+    // Filed under nothing at all, which must not invent a project called "".
+    vault.add_item(&mut store, draft("D", "x")).expect("add");
+
+    assert_eq!(
+        vault.projects(),
+        vec!["Home", "Work"],
+        "distinct names, in order, with no empty one"
+    );
+}
+
+#[test]
+fn a_project_that_loses_its_last_entry_is_gone() {
+    let mut store = MemoryStore::new();
+    let (mut vault, _) = Vault::create(&mut store, IDENTIFIER, PASSWORD, params()).expect("create");
+
+    let only = vault
+        .add_item(&mut store, draft_in("A", "Work"))
+        .expect("add");
+    assert_eq!(vault.projects(), vec!["Work"]);
+
+    vault.delete_item(&mut store, only).expect("delete");
+    assert!(
+        vault.projects().is_empty(),
+        "a project is only ever what is filed under it"
+    );
+}
+
+#[test]
+fn a_projects_name_is_trimmed_like_a_title() {
+    let mut store = MemoryStore::new();
+    let (mut vault, _) = Vault::create(&mut store, IDENTIFIER, PASSWORD, params()).expect("create");
+
+    // " Work " and "Work" are the same project; filing them separately would split a group
+    // the user made in one gesture without ever seeing the difference.
+    vault
+        .add_item(&mut store, draft_in("A", "  Work  "))
+        .expect("add");
+    vault
+        .add_item(&mut store, draft_in("B", "Work"))
+        .expect("add");
+
+    assert_eq!(vault.projects(), vec!["Work"]);
+}
+
+#[test]
+fn project_names_differing_only_in_case_are_not_merged() {
+    let mut store = MemoryStore::new();
+    let (mut vault, _) = Vault::create(&mut store, IDENTIFIER, PASSWORD, params()).expect("create");
+
+    vault
+        .add_item(&mut store, draft_in("A", "work"))
+        .expect("add");
+    vault
+        .add_item(&mut store, draft_in("B", "Work"))
+        .expect("add");
+
+    // Two names the user typed differently stay two projects, and stay next to each other.
+    assert_eq!(vault.projects(), vec!["Work", "work"]);
+}
+
+#[test]
+fn a_project_survives_a_reload() {
+    let mut store = MemoryStore::new();
+    let (mut vault, _) = Vault::create(&mut store, IDENTIFIER, PASSWORD, params()).expect("create");
+    let id = vault
+        .add_item(&mut store, draft_in("A", "Work"))
+        .expect("add");
+
+    // The project is inside the sealed record, so it comes back only through decryption.
+    drop(vault);
+    let vault = Vault::unlock(&store, PASSWORD).expect("unlock");
+
+    assert_eq!(vault.item(id).expect("the item came back").project, "Work");
+    assert_eq!(vault.projects(), vec!["Work"]);
+}
+
+#[test]
+fn editing_an_entry_can_move_it_between_projects() {
+    let mut store = MemoryStore::new();
+    let (mut vault, _) = Vault::create(&mut store, IDENTIFIER, PASSWORD, params()).expect("create");
+    let id = vault
+        .add_item(&mut store, draft_in("A", "Work"))
+        .expect("add");
+
+    vault
+        .update_item(&mut store, id, draft_in("A", "Home"))
+        .expect("update");
+
+    assert_eq!(vault.item(id).expect("item").project, "Home");
+    assert_eq!(
+        vault.projects(),
+        vec!["Home"],
+        "the old project is not left behind"
+    );
 }
 
 #[test]

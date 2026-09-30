@@ -151,6 +151,26 @@ h2 {
   border-bottom-color: var(--fg);
 }
 
+/* The header's sign-in/sign-out control is a button, not a link: it changes what the page is
+   doing rather than pointing at another document, and the session decides which of the two
+   words it wears. It has to look exactly like `.link` while behaving like a control, so the
+   button defaults — background, padding, the browser's own border — are undone here. */
+.link-button {
+  padding: 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line-strong);
+  border-radius: 0;
+  font: inherit;
+  color: var(--fg);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.link-button:hover {
+  border-bottom-color: var(--fg);
+}
+
 /* --- chrome ---------------------------------------------------------------- */
 
 .topbar {
@@ -527,6 +547,122 @@ textarea:focus,
   padding-bottom: 22px;
 }
 
+/* --- the cabinet: two lists ------------------------------------------------ */
+
+/* The hairline between the panels is the 1px grid gap showing the background through, the
+   same trick as `.principles` on the landing page, so it stays exactly one pixel at any
+   zoom instead of rounding the way a border does. */
+.cabinet {
+  display: grid;
+  grid-template-columns: minmax(190px, 260px) 1fr;
+  gap: 1px;
+  background: var(--line);
+  border-block: 1px solid var(--line);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  padding-block: 26px;
+  background: var(--bg);
+}
+
+.panel:first-child {
+  padding-right: 24px;
+}
+
+.panel:last-child {
+  padding-left: 24px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.panel-title {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.panel-scope {
+  font-size: 0.75rem;
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
+
+/* --- projects -------------------------------------------------------------- */
+
+.projects {
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.project {
+  border-bottom: 1px solid var(--line);
+}
+
+/* A whole row is the target, not a word inside it: the name of a project is a long,
+   unpredictable string, and a person aiming at «Инфраструктура» should not have to hit the
+   text itself. */
+.project-button {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.project-button:hover {
+  color: var(--fg);
+}
+
+.project-button:focus-visible {
+  outline: 1px solid var(--fg);
+  outline-offset: 2px;
+}
+
+/* Weight and colour carry the selection, because there is no accent colour to spend and a
+   filled row would read as a button rather than as a state. */
+.project-button[aria-current='true'] {
+  color: var(--fg);
+  font-weight: 700;
+}
+
+.project-count {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--faint);
+}
+
+.item-project {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
 .items {
   list-style: none;
   border-top: 1px solid var(--line);
@@ -645,6 +781,17 @@ textarea:focus,
 @media (max-width: 880px) {
   .principles {
     grid-template-columns: 1fr;
+  }
+
+  /* Stacked, the panels share the column instead of sitting side by side, so the horizontal
+     padding that separated them becomes padding that pushes them apart for no reason. */
+  .cabinet {
+    grid-template-columns: 1fr;
+  }
+
+  .panel:first-child,
+  .panel:last-child {
+    padding-inline: 0;
   }
 
   .principle {

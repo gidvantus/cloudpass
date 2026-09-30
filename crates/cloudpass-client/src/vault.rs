@@ -514,6 +514,36 @@ impl Vault {
             .map(|record| &record.item)
     }
 
+    /// The distinct project names in use, ordered the way [`Vault::items`] is.
+    ///
+    /// There is no project record anywhere: this is derived from the entries that name one,
+    /// so a project exists exactly as long as something is filed under it. Deleting the last
+    /// entry of a project, or pulling that deletion from another device, retires the project
+    /// with no extra bookkeeping and nothing that can disagree with the entries themselves.
+    ///
+    /// The ordering is by lowercased name with the name itself as the tie-break, so it is
+    /// stable across runs and platforms — two names differing only in case stay adjacent
+    /// instead of shuffling past each other. They are *not* merged: "Work" and "work" are
+    /// different names, and quietly folding them together would move entries the user filed
+    /// deliberately.
+    #[must_use]
+    pub fn projects(&self) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .items
+            .values()
+            .filter(|record| !record.deleted)
+            .map(|record| record.item.project.clone())
+            .filter(|name| !name.is_empty())
+            .collect();
+        names.sort_by(|left, right| {
+            left.to_lowercase()
+                .cmp(&right.to_lowercase())
+                .then_with(|| left.cmp(right))
+        });
+        names.dedup();
+        names
+    }
+
     /// Adds an item and writes it to the store.
     pub fn add_item(&mut self, store: &mut dyn Store, draft: ItemDraft) -> Result<Uuid> {
         let draft = draft.normalised();
@@ -527,6 +557,7 @@ impl Vault {
             id,
             vault_id: self.account.vault_id,
             title: draft.title,
+            project: draft.project,
             username: draft.username,
             password: draft.password,
             url: draft.url,
@@ -557,6 +588,7 @@ impl Vault {
             id,
             vault_id: record.item.vault_id,
             title: draft.title,
+            project: draft.project,
             username: draft.username,
             password: draft.password,
             url: draft.url,

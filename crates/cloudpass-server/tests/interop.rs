@@ -123,6 +123,7 @@ async fn request(
 fn draft(title: &str, password: &str) -> ItemDraft {
     ItemDraft {
         title: title.to_owned(),
+        project: String::new(),
         username: "octocat".to_owned(),
         password: password.to_owned(),
         url: "https://github.com".to_owned(),
