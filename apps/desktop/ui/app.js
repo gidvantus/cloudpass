@@ -78,7 +78,7 @@ function wipeSecretFields() {
 function renderStatus(status) {
   const items = `${status.item_count} item${status.item_count === 1 ? '' : 's'}`;
   if (!status.unlocked) {
-    statusLine.textContent = status.has_account ? 'locked' : 'no vault yet';
+    statusLine.textContent = status.has_account ? 'locked' : 'no vault on this machine';
   } else if (status.pending_count > 0) {
     statusLine.textContent = `unlocked · ${items} · ${status.pending_count} to send`;
   } else {
@@ -154,7 +154,9 @@ async function refresh() {
     showPanel('vault');
     renderItems(await invoke('list_items'));
   } else {
-    showPanel(status.has_account ? 'unlock' : 'create');
+    // Signing in is the first gate: on a machine with no account yet the user is asked to
+    // enrol, not to create, and reaches creation through a link from that screen.
+    showPanel(status.has_account ? 'unlock' : 'join');
     // Offering a route that cannot work would be worse than not offering it: an account
     // whose record predates the kit has no recovery envelope, and saying so is kinder
     // than a dead end.
@@ -266,6 +268,13 @@ byId('show-join').addEventListener('click', () => {
   wipeSecretFields();
   showPanel('join');
   byId('join-identifier').focus();
+});
+
+byId('show-create').addEventListener('click', () => {
+  clearComplaint();
+  wipeSecretFields();
+  showPanel('create');
+  byId('create-identifier').focus();
 });
 
 byId('join-cancel').addEventListener('click', async () => {
