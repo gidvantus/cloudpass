@@ -15,51 +15,132 @@
 
       <p class="banner" id="banner" hidden></p>
 
-      <!-- Account setup ------------------------------------------------------ -->
-      <section class="panel" id="create-panel" hidden>
-        <h2>Create a vault</h2>
-        <p class="hint">
-          The master password is stretched with Argon2id on this machine and never leaves
-          it. It cannot be recovered — lose it and the vault is gone.
-        </p>
-        <form id="create-form" autocomplete="off">
-          <label for="create-identifier">Account name</label>
-          <input id="create-identifier" type="text" autocomplete="username" spellcheck="false" />
-          <label for="create-password">Master password</label>
-          <input id="create-password" type="password" autocomplete="new-password" />
-          <label for="create-confirm">Repeat it</label>
-          <input id="create-confirm" type="password" autocomplete="new-password" />
-          <button type="submit" id="create-submit">Create</button>
-        </form>
-        <p class="hint">
-          Already have an account — for example one you created in the web portal?
-          <button type="button" class="link" id="show-join">Sign in on this machine</button>
-        </p>
+      <!-- Sign in. First gate for a machine that has no local account yet ------ -->
+      <section class="panel panel-split" id="join-panel" data-testid="join-panel" hidden>
+        <div class="panel-main">
+          <h2>Sign in to an existing account</h2>
+          <p class="hint">
+            Enter the account name and master password you registered with. Everything on
+            the server is ciphertext, so it is these two things — not a copied file — that
+            make this machine able to read your vault. This machine gets its own device key;
+            nothing is copied from the other one.
+          </p>
+          <form id="join-form" autocomplete="off" data-testid="join-form">
+            <label for="join-identifier">Account name</label>
+            <input
+              id="join-identifier"
+              data-testid="join-identifier"
+              type="text"
+              autocomplete="username"
+              spellcheck="false"
+            />
+            <label for="join-password">Master password</label>
+            <input
+              id="join-password"
+              data-testid="join-password"
+              type="password"
+              autocomplete="current-password"
+            />
+            <div class="row-actions">
+              <button type="submit" id="join-submit" data-testid="join-submit">Sign in</button>
+              <button type="button" class="secondary" id="join-cancel" data-testid="join-cancel">
+                Back
+              </button>
+            </div>
+          </form>
+          <p class="hint">
+            This is the first time this machine has met the server, so it has to take the
+            server's key on trust at this moment. Every later sign-in is checked against it.
+          </p>
+          <p class="hint">
+            No account on this server yet?
+            <button type="button" class="link" id="show-create" data-testid="show-create">
+              Create a vault on this machine
+            </button>
+          </p>
+        </div>
+        <aside class="panel-aside" data-testid="join-theses">
+          <h3>The master password</h3>
+          <p class="hint">
+            It is stretched with Argon2id on this machine and never leaves it.
+          </p>
+          <h3>What the server holds</h3>
+          <p class="hint">
+            Ciphertext: envelopes it cannot open, plus no key that could open them.
+          </p>
+          <h3>What sign-in tells the server</h3>
+          <p class="hint">
+            Nothing that checks a password: OPAQUE keeps it off the network and leaves the
+            server with a record it cannot test guesses against.
+          </p>
+          <h3>If the master password is gone</h3>
+          <p class="hint">
+            The Emergency Kit is the only way back: the recovery key is stored nowhere, so
+            neither this machine nor the server can reproduce it.
+          </p>
+        </aside>
       </section>
 
-      <!-- Join an account that exists on the server --------------------------- -->
-      <section class="panel" id="join-panel" hidden>
-        <h2>Sign in to an existing account</h2>
-        <p class="hint">
-          Enter the account name and master password you registered with. Everything on
-          the server is ciphertext, so it is these two things — not a copied file — that
-          make this machine able to read your vault. This machine gets its own device key;
-          nothing is copied from the other one.
-        </p>
-        <form id="join-form" autocomplete="off">
-          <label for="join-identifier">Account name</label>
-          <input id="join-identifier" type="text" autocomplete="username" spellcheck="false" />
-          <label for="join-password">Master password</label>
-          <input id="join-password" type="password" autocomplete="current-password" />
-          <div class="row-actions">
-            <button type="submit" id="join-submit">Sign in</button>
-            <button type="button" class="secondary" id="join-cancel">Back</button>
-          </div>
-        </form>
-        <p class="hint">
-          This is the first time this machine has met the server, so it has to take the
-          server's key on trust at this moment. Every later sign-in is checked against it.
-        </p>
+      <!-- Account setup ------------------------------------------------------ -->
+      <section class="panel panel-split" id="create-panel" data-testid="create-panel" hidden>
+        <div class="panel-main">
+          <h2>Create a vault</h2>
+          <p class="hint">
+            The master password is stretched with Argon2id on this machine and never leaves
+            it. It cannot be recovered — lose it and the vault is gone.
+          </p>
+          <form id="create-form" autocomplete="off" data-testid="create-form">
+            <label for="create-identifier">Account name</label>
+            <input
+              id="create-identifier"
+              data-testid="create-identifier"
+              type="text"
+              autocomplete="username"
+              spellcheck="false"
+            />
+            <label for="create-password">Master password</label>
+            <input
+              id="create-password"
+              data-testid="create-password"
+              type="password"
+              autocomplete="new-password"
+            />
+            <label for="create-confirm">Repeat it</label>
+            <input
+              id="create-confirm"
+              data-testid="create-confirm"
+              type="password"
+              autocomplete="new-password"
+            />
+            <button type="submit" id="create-submit" data-testid="create-submit">Create</button>
+          </form>
+          <p class="hint">
+            Already have an account — for example one you created in the web portal?
+            <button type="button" class="link" id="show-join" data-testid="show-join">
+              Sign in on this machine
+            </button>
+          </p>
+        </div>
+        <aside class="panel-aside" data-testid="create-theses">
+          <h3>The master password</h3>
+          <p class="hint">
+            It is stretched with Argon2id on this machine and never leaves it.
+          </p>
+          <h3>What the server holds</h3>
+          <p class="hint">
+            Ciphertext: envelopes it cannot open, plus no key that could open them.
+          </p>
+          <h3>What sign-in tells the server</h3>
+          <p class="hint">
+            Nothing that checks a password: OPAQUE keeps it off the network and leaves the
+            server with a record it cannot test guesses against.
+          </p>
+          <h3>If the master password is gone</h3>
+          <p class="hint">
+            The Emergency Kit is the only way back: the recovery key is stored nowhere, so
+            neither this machine nor the server can reproduce it.
+          </p>
+        </aside>
       </section>
 
       <!-- Unlock ------------------------------------------------------------- -->

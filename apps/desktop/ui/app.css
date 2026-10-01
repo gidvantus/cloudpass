@@ -145,6 +145,29 @@ h3 {
   border-top: 1px solid var(--line);
 }
 
+/* The two halves of the sign-in and create screens: the form on the left, the statements
+   about how passwords are stored on the right. Equal columns, one hairline between them,
+   air from the same variables as the rest of the column — no new colour, no card, no
+   shadow. `align-items` is left at its default so the hairline spans the whole band even
+   when one half is shorter. */
+.panel-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.panel-split > .panel-main {
+  padding-right: var(--gutter);
+}
+
+.panel-split > .panel-aside {
+  border-left: 1px solid var(--line);
+  padding-left: var(--gutter);
+}
+
+.panel-split > .panel-aside h3:first-child {
+  margin-top: 0;
+}
+
 .hint {
   margin: 0 0 16px;
   color: var(--muted);
@@ -398,5 +421,22 @@ button:focus-visible {
     flex-direction: column;
     align-items: flex-start;
     gap: 6px;
+  }
+
+  /* One column: the halves stack, and the hairline moves to the seam between them. */
+  .panel-split {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-split > .panel-main {
+    padding-right: 0;
+  }
+
+  .panel-split > .panel-aside {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding-left: 0;
+    margin-top: 20px;
+    padding-top: 20px;
   }
 }
