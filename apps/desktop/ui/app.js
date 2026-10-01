@@ -97,9 +97,20 @@ function renderStatus(status) {
   syncNote.textContent = notes.join(' · ');
   syncNote.hidden = notes.length === 0;
 
-  footer.textContent = status.has_account
-    ? `${status.identifier} · Argon2id m=${status.kdf_m_kib} KiB, t=${status.kdf_t}, p=${status.kdf_p} · ${status.data_directory}`
-    : `The vault is stored only on this machine. Server: ${status.server_url}`;
+  // Where the application is pointed and where it keeps its data, in every state of the
+  // account: with several installations on one desk, this line is how a person tells which
+  // server and which directory they are looking at, and before an account exists it is the
+  // only place those two facts can be read at all.
+  const location = [];
+  if (status.identifier) {
+    location.push(status.identifier);
+  }
+  location.push(status.server_url);
+  if (status.has_account) {
+    location.push(`Argon2id m=${status.kdf_m_kib} KiB, t=${status.kdf_t}, p=${status.kdf_p}`);
+  }
+  location.push(status.data_directory);
+  footer.textContent = location.join(' · ');
 }
 
 /** Draws the item list. Titles are user data, so they are set as text. */
