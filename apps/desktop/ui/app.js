@@ -283,7 +283,14 @@ function renderItems(items) {
 /** The row markup every item is drawn from, cloned rather than built element by element. */
 const itemRowTemplate = byId('item-row-template');
 
-/** Draws the item list. Titles are user data, so they are set as text. */
+/**
+ * Draws the item list. Titles are user data, so they are set as text.
+ *
+ * The clone is translated here, and that is not belt-and-braces: a `<template>` is a document
+ * fragment, not part of the document, so `applyTranslations()` walking the page never sees the
+ * markup inside it. Without this line every drawn button keeps the wording the template was
+ * written in — a list of Russian buttons on an English screen, whatever `data-i18n` says.
+ */
 function drawItems() {
   itemList.replaceChildren();
   emptyHint.hidden = lastItems.length > 0;
@@ -291,6 +298,7 @@ function drawItems() {
   for (const item of lastItems) {
     const row = itemRowTemplate.content.firstElementChild.cloneNode(true);
     row.setAttribute('data-item-id', item.id);
+    i18n.applyTranslations(row);
 
     const button = row.querySelector('.item-button');
     button.addEventListener('click', () => openEditor(item.id));
