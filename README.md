@@ -68,7 +68,7 @@ scripts/build-desktop.ps1 # сборка приложения и установ�
 scripts/web-smoke.mjs     # сквозная проверка wasm-модуля против живого сервера
 scripts/browser-check.mjs # то же в настоящем браузере, через Chrome DevTools Protocol
 scripts/verify-argon2-reference.mjs   # независимая проверка Argon2id (OpenSSL через Node)
-scripts/make-app-icon.mjs             # генерация placeholder-иконки приложения
+scripts/make-app-icon.mjs             # иконка приложения из favicon портала
 
 Dockerfile                # сервер + портал в одном образе (multi-stage)
 compose.yaml              # запуск одной командой, данные в томе
@@ -238,17 +238,17 @@ node .\scripts\web-smoke.mjs http://127.0.0.1:8080
 
 ```bash
 docker compose up --build
-# → http://localhost:8090
+# → http://localhost:8080
 ```
 
-Порт снаружи — **8090**, а не привычный 8080: 8080 на машине разработчика почти всегда уже
-чем-нибудь занят, и молчаливо падать на `bind: address already in use` — плохой первый опыт.
-Внутри контейнера сервер всегда слушает 8080; меняется только внешний номер, и его можно
-переопределить, не трогая файл:
+Порт снаружи — **8080**, тот же, что и внутри контейнера, и тот же, что у сервера и
+приложения по умолчанию: 8080 — единственный адрес в проекте, поэтому строка из README,
+аргумент теста и адрес, на который смотрит desktop, означают одно и то же. Если на машине
+8080 уже занят, внешний номер сдвигается без правки файла:
 
 ```bash
-CLOUDPASS_PORT=8080 docker compose up -d          # POSIX shell
-$env:CLOUDPASS_PORT=8080; docker compose up -d    # PowerShell
+CLOUDPASS_PORT=8090 docker compose up -d          # POSIX shell
+$env:CLOUDPASS_PORT=8090; docker compose up -d    # PowerShell
 ```
 
 Что нужно знать про этот образ:
@@ -263,7 +263,7 @@ $env:CLOUDPASS_PORT=8080; docker compose up -d    # PowerShell
   одному тулчейну, а сборка идёт другим, и ошибка выглядит как «the
   `wasm32-unknown-unknown` target may not be installed» при непустом `rustup target list`.
 - **Порт слушается на loopback.** `localhost` — это secure context, и только в нём работает
-  `navigator.clipboard`, то есть скрытое копирование. На `http://<ip-в-локалке>:8090`
+  `navigator.clipboard`, то есть скрытое копирование. На `http://<ip-в-локалке>:8080`
   браузер клипборд не даст, и кнопка честно откажет. Открывать наружу — это решение про TLS,
   а не про удобство: сначала reverse-proxy.
 - **Данные — в томе `cloudpass-data`.** Там аккаунт, шифрованные записи и OPAQUE-состояние
@@ -286,9 +286,9 @@ docker compose down -v                # остановить и стереть �
 # Проверить контейнер ровно тем артефактом, который он отдаёт браузеру: скачать модуль
 # с самого сервера и прогнать smoke-тест против него, а не против локальной сборки.
 mkdir -p target/container-pkg && cd target/container-pkg
-curl -O http://127.0.0.1:8090/pkg/cloudpass_web.js
-curl -O http://127.0.0.1:8090/pkg/cloudpass_web_bg.wasm
-cd ../.. && node scripts/web-smoke.mjs http://127.0.0.1:8090 target/container-pkg
+curl -O http://127.0.0.1:8080/pkg/cloudpass_web.js
+curl -O http://127.0.0.1:8080/pkg/cloudpass_web_bg.wasm
+cd ../.. && node scripts/web-smoke.mjs http://127.0.0.1:8080 target/container-pkg
 ```
 
 ### Web-портал

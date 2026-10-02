@@ -109,7 +109,6 @@ const banner = byId('banner');
 const statusLine = byId('status');
 const itemList = byId('item-list');
 const emptyHint = byId('empty-hint');
-const footer = byId('footer');
 const syncNote = byId('sync-note');
 
 /** The last status the vault reported, kept so a language switch does not need another call. */
@@ -265,22 +264,6 @@ function drawStatus() {
   }
   syncNote.textContent = notes.join(' · ');
   syncNote.hidden = notes.length === 0;
-
-  // Where the application is pointed and where it keeps its data, in every state of the
-  // account: with several installations on one desk, this line is how a person tells which
-  // server and which directory they are looking at, and before an account exists it is the
-  // only place those two facts can be read at all. None of it is wording — an identifier, an
-  // address, a directory and the KDF parameters read the same in every language.
-  const location = [];
-  if (status.identifier) {
-    location.push(status.identifier);
-  }
-  location.push(status.server_url);
-  if (status.has_account) {
-    location.push(`Argon2id m=${status.kdf_m_kib} KiB, t=${status.kdf_t}, p=${status.kdf_p}`);
-  }
-  location.push(status.data_directory);
-  footer.textContent = location.join(' · ');
 }
 
 function renderItems(items) {

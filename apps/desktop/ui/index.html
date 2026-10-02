@@ -100,7 +100,8 @@
         <aside class="panel-aside" data-testid="join-theses">
           <h3 data-i18n="thesis-password-title">Мастер-пароль</h3>
           <p class="hint" data-i18n="thesis-password-text">
-            Он растягивается Argon2id на этой машине и никогда её не покидает.
+            Мастер-пароль не покидает устройство. Ключ выводится локально через Argon2id, а
+            сервер хранит только то, что не умеет расшифровывать.
           </p>
           <h3 data-i18n="thesis-server-title">Что хранит сервер</h3>
           <p class="hint" data-i18n="thesis-server-text">
@@ -173,7 +174,8 @@
         <aside class="panel-aside" data-testid="create-theses">
           <h3 data-i18n="thesis-password-title">Мастер-пароль</h3>
           <p class="hint" data-i18n="thesis-password-text">
-            Он растягивается Argon2id на этой машине и никогда её не покидает.
+            Мастер-пароль не покидает устройство. Ключ выводится локально через Argon2id, а
+            сервер хранит только то, что не умеет расшифровывать.
           </p>
           <h3 data-i18n="thesis-server-title">Что хранит сервер</h3>
           <p class="hint" data-i18n="thesis-server-text">
@@ -361,10 +363,6 @@
           </div>
         </form>
       </section>
-
-      <!-- Assembled from data, not from wording: identifiers, the server address, the KDF
-           parameters and the data directory are the same in every language. -->
-      <footer class="footer" id="footer"></footer>
     </main>
     <!-- A module, like the portal's: the tables are ES modules beside it, and the CSP already
          allows scripts from this origin only. -->

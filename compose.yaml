@@ -1,7 +1,13 @@
 # CloudPass, running locally: the sync server and the web portal it serves.
 #
 #   docker compose up --build
-#   → http://localhost:8090
+#   → http://localhost:8080
+#
+# 8080 is the project's one address: the server binds it by default, the desktop application
+# points at it by default, and the smoke tests assume it. The container's host-side port
+# defaults to that same number rather than to a second one, so an address copied out of one
+# part of the project — a README line, a test argument, the application's own default —
+# means the same thing in every other part.
 #
 # The first build compiles the whole dependency tree and takes several minutes. Later builds
 # reuse the cargo caches mounted in the Dockerfile, so a change to `crates/` or `apps/web/`
@@ -21,13 +27,13 @@ services:
       # silently refuse on `http://<lan-ip>:...`. Widening this is a decision about TLS,
       # not about convenience: put a reverse proxy in front first.
       #
-      # 8090 rather than the conventional 8080 because 8080 is one of the most contested
-      # ports on a developer machine. The port *inside* the container is always 8080; only
-      # this host-side number changes, and it can be overridden without editing the file:
+      # 8080, the same number the container listens on and the same one the desktop
+      # application expects. On a machine where 8080 is already taken, move the host side
+      # without editing the file:
       #
-      #   $env:CLOUDPASS_PORT=8080; docker compose up -d      # PowerShell
-      #   CLOUDPASS_PORT=8080 docker compose up -d            # POSIX shell
-      - "127.0.0.1:${CLOUDPASS_PORT:-8090}:8080"
+      #   $env:CLOUDPASS_PORT=8090; docker compose up -d      # PowerShell
+      #   CLOUDPASS_PORT=8090 docker compose up -d            # POSIX shell
+      - "127.0.0.1:${CLOUDPASS_PORT:-8080}:8080"
 
     volumes:
       # The account, its encrypted items and the server's OPAQUE setup. Losing this volume

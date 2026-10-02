@@ -13,13 +13,13 @@
 //   1. start the server            cargo run -p cloudpass-server
 //   2. start a debuggable browser  chrome --headless=new --remote-debugging-port=9222 \
 //                                        --user-data-dir=<dir> --no-sandbox about:blank
-//   3. node scripts/browser-check.mjs http://127.0.0.1:8091
+//   3. node scripts/browser-check.mjs http://127.0.0.1:8080
 //
 // The browser is launched separately because starting a child process with piped stdio is
 // blocked in the environment this was written in, and a driver that cannot run where the code
 // lives is a driver nobody runs.
 
-const origin = (process.argv[2] || 'http://127.0.0.1:8091').replace(/\/$/, '');
+const origin = (process.argv[2] || 'http://127.0.0.1:8080').replace(/\/$/, '');
 const port = process.argv[3] || '9222';
 
 let failures = 0;
