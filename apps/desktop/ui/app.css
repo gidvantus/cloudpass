@@ -138,6 +138,34 @@ h3 {
   color: var(--muted);
 }
 
+/* The status line and the language picker, on the right of the masthead. */
+.masthead-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.language-select {
+  padding: 4px 6px;
+  background: var(--field);
+  color: var(--fg);
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.language-select:focus-visible {
+  outline: 1px solid var(--fg);
+  outline-offset: 2px;
+  border-color: var(--fg);
+}
+
 .panel {
   display: flex;
   flex-direction: column;

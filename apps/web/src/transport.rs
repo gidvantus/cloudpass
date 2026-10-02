@@ -18,6 +18,16 @@ use wasm_bindgen_futures::JsFuture;
 use cloudpass_client::sync::{HttpRequest, HttpResponse, Transport};
 use cloudpass_client::ClientError;
 
+/// The clipboard is missing because the page is not in a secure context.
+///
+/// The clipboard belongs to the browser rather than to the vault, so a failure to reach it is
+/// not something this module can word — and it must not try: the wording lives in the page's
+/// locale tables, and the page only ever has the code. Two codes are all it needs.
+pub const CLIPBOARD_INSECURE_ORIGIN: &str = "clipboard-insecure-origin";
+
+/// The clipboard is there and refused: a permission, or an implementation without `writeText`.
+pub const CLIPBOARD_DENIED: &str = "clipboard-denied";
+
 /// Renders a JavaScript exception as something a human can read.
 ///
 /// `JsValue` has no useful `Display`, and its `Debug` is a pointer. The message property
@@ -51,7 +61,7 @@ fn global_function(name: &str) -> Result<js_sys::Function, ClientError> {
 fn as_promise(value: JsValue) -> Result<js_sys::Promise, ClientError> {
     value
         .dyn_into::<js_sys::Promise>()
-        .map_err(|_| ClientError::Transport("вызов не вернул обещание".to_owned()))
+        .map_err(|_| ClientError::Transport("the call did not return a promise".to_owned()))
 }
 
 /// Sends requests with the browser's own `fetch`.
@@ -108,7 +118,7 @@ impl Transport for FetchTransport {
             .map_err(|e| transport_error(&e))?;
         let response: web_sys::Response = value
             .dyn_into()
-            .map_err(|_| ClientError::Transport("fetch вернул не ответ".to_owned()))?;
+            .map_err(|_| ClientError::Transport("fetch did not return a response".to_owned()))?;
 
         let status = response.status();
         let buffer = JsFuture::from(response.array_buffer().map_err(|e| transport_error(&e))?)
@@ -132,31 +142,31 @@ impl Transport for FetchTransport {
 /// else `navigator.clipboard` is simply absent, which is reported as itself rather than as
 /// a mysterious failure: a "copied" button that copied nothing is worse than one that
 /// says why it could not.
+///
+/// The two failures are reported as [`CLIPBOARD_INSECURE_ORIGIN`] and [`CLIPBOARD_DENIED`]
+/// rather than as sentences. Which words a person reads for them is the page's business, and
+/// only the page knows what language to write them in.
 pub async fn write_clipboard(text: &str) -> Result<(), ClientError> {
     let navigator = property(&js_sys::global(), "navigator")?;
     let clipboard = property(&navigator, "clipboard")?;
     if clipboard.is_undefined() || clipboard.is_null() {
-        return Err(ClientError::Transport(
-            "браузер не даёт доступ к буферу обмена: для этого нужен https или localhost"
-                .to_owned(),
-        ));
+        return Err(ClientError::Transport(CLIPBOARD_INSECURE_ORIGIN.to_owned()));
     }
 
     let write_text = property(&clipboard, "writeText")?;
-    let write_text = write_text.dyn_into::<js_sys::Function>().map_err(|_| {
-        ClientError::Transport("в этом браузере нет записи в буфер обмена".to_owned())
-    })?;
+    let write_text = write_text
+        .dyn_into::<js_sys::Function>()
+        .map_err(|_| ClientError::Transport(CLIPBOARD_DENIED.to_owned()))?;
 
     let promise = write_text
         .call1(&clipboard, &JsValue::from_str(text))
         .map_err(|e| transport_error(&e))?;
 
-    JsFuture::from(as_promise(promise)?).await.map_err(|e| {
-        ClientError::Transport(format!(
-            "браузер отказал в доступе к буферу обмена ({})",
-            describe(&e)
-        ))
-    })?;
+    // The browser's own description of the refusal is kept behind the code: it is a
+    // diagnostic, and the code is what the page turns into a sentence.
+    JsFuture::from(as_promise(promise)?)
+        .await
+        .map_err(|e| ClientError::Transport(format!("{}: {}", CLIPBOARD_DENIED, describe(&e))))?;
 
     Ok(())
 }

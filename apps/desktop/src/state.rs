@@ -194,8 +194,11 @@ pub struct AppState {
     /// credential, and the alternative costs the user nothing: unlocking already asks
     /// for the master password, which is exactly when a fresh token can be obtained.
     pub session: Option<RemoteSession>,
-    /// A short, human-readable note about the last synchronization.
-    pub last_sync: Option<String>,
+    /// What the last synchronization did, as a key and the numbers that go with it.
+    ///
+    /// A key rather than a sentence: the interface owns the wording, and this side does not
+    /// know what language the reader chose. `commands::SyncNote` is the shape.
+    pub last_sync: Option<crate::commands::SyncNote>,
 }
 
 impl AppState {

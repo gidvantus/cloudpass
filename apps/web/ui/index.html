@@ -6,7 +6,13 @@
     <meta name="referrer" content="no-referrer" />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#000000" />
-    <title>CloudPass — менеджер паролей</title>
+    <title data-i18n="page-title">CloudPass — менеджер паролей</title>
+    <!-- Only the language is ever stored in this browser; see `app.js` and the README. The
+         markup below is written in Russian because that is the default; `app.js` reads a
+         stored `en` and swaps both the text and `document.documentElement.lang` before the
+         first screen is shown. There is deliberately no inline script here: the portal is
+         served under `script-src 'self'`, and an inline one would be blocked — and would
+         put a console error on every page load. -->
     <!-- A mark, so the browser does not ask for a `/favicon.ico` that does not exist. That
          request is a 404 in the console, and a console with a permanent 404 in it is a console
          nobody reads — which is where the real errors go to hide. -->
@@ -32,7 +38,11 @@
   </head>
   <body>
     <!-- Every screen is a `.view`; the router shows exactly one. Nothing here holds state
-         that matters — the wasm module does, and this file only asks it questions. -->
+         that matters — the wasm module does, and this file only asks it questions.
+
+         Every string a person reads carries `data-i18n="<key>"`, or `data-i18n-attr` plus a
+         key when it is an attribute rather than text. The keys are the ones in
+         `locales-ru.js` and `locales-en.js`; nothing is written here twice. -->
     <div class="app" id="app" hidden>
       <p class="banner" id="banner" hidden></p>
 
@@ -47,44 +57,63 @@
             <button class="link link-button" type="button" id="topbar-auth" data-testid="topbar-auth">
               Войти
             </button>
+            <!-- The same picker on every screen except the Emergency Kit, which has no way
+                 out by design and therefore nothing to come back to. -->
+            <select
+              class="language-select"
+              id="language-select"
+              data-testid="language-select"
+              data-i18n="nav-language"
+              data-i18n-attr="aria-label"
+              aria-label="Язык интерфейса"
+            >
+              <option value="ru" data-i18n="language-ru" data-testid="language-option-ru">
+                Русский
+              </option>
+              <option value="en" data-i18n="language-en" data-testid="language-option-en">
+                English
+              </option>
+            </select>
           </nav>
         </header>
 
         <main class="landing">
           <section class="hero">
-            <p class="eyebrow">Менеджер паролей</p>
-            <h1>Пароли, которые не&nbsp;прочитает никто, кроме вас.</h1>
-            <p class="lede">
+            <p class="eyebrow" data-i18n="landing-eyebrow">Менеджер паролей</p>
+            <h1 data-i18n="landing-title">Пароли, которые не&nbsp;прочитает никто, кроме вас.</h1>
+            <p class="lede" data-i18n="landing-lede">
               Шифрование происходит в вашем браузере. Сервер получает только шифротекст
               и не может его открыть — даже если захочет.
             </p>
             <div class="actions">
-              <a class="btn btn-solid" href="#/register">Создать аккаунт</a>
-              <a class="btn btn-outline" href="#/login">Войти</a>
+              <a class="btn btn-solid" href="#/register" data-i18n="landing-create-account">
+                Создать аккаунт
+              </a>
+              <a class="btn btn-outline" href="#/login" data-i18n="nav-sign-in">Войти</a>
             </div>
           </section>
 
           <section class="principles">
             <article class="principle">
               <p class="principle-index">01</p>
-              <h2>Нулевое знание</h2>
-              <p>
+              <h2 data-i18n="landing-principle-1-title">Нулевое знание</h2>
+              <p data-i18n="landing-principle-1-text">
                 Мастер-пароль не покидает устройство. Ключ выводится локально через
                 Argon2id, а сервер хранит только то, что не умеет расшифровывать.
               </p>
             </article>
             <article class="principle">
               <p class="principle-index">02</p>
-              <h2>Свой ключ на запись</h2>
-              <p>
+              <h2 data-i18n="landing-principle-2-title">Свой ключ на запись</h2>
+              <p data-i18n="landing-principle-2-text">
                 AES-256-GCM и отдельный ключ для каждой записи. Связанные данные привязывают
                 шифротекст к месту и ревизии: подменить или перенести запись нельзя.
               </p>
             </article>
             <article class="principle">
               <p class="principle-index">03</p>
-              <h2>Возврат на бумаге</h2>
-              <p>
+              <h2 data-i18n="landing-principle-3-title">Возврат на бумаге</h2>
+              <p data-i18n="landing-principle-3-text">
                 Emergency Kit с ключом восстановления — единственный путь назад. Этот ключ не
                 хранится нигде: ни на сервере, ни на вашем диске.
               </p>
@@ -92,28 +121,39 @@
           </section>
 
           <section class="callout">
-            <h2>Начните с одного пароля.</h2>
-            <p>
+            <h2 data-i18n="landing-callout-title">Начните с одного пароля.</h2>
+            <p data-i18n="landing-callout-text">
               Аккаунт создаётся за минуту. Мастер-пароль восстановить нельзя — сохраните
               Emergency Kit, который выдаётся сразу после регистрации.
             </p>
-            <a class="btn btn-inverse" href="#/register">Создать аккаунт</a>
+            <a class="btn btn-inverse" href="#/register" data-i18n="landing-create-account">
+              Создать аккаунт
+            </a>
           </section>
 
           <!-- Сборка для компьютера. Показывается только если сервер действительно
                что-то раздаёт: ссылка на несуществующий файл хуже, чем её отсутствие. -->
           <section class="desktop" id="desktop-block" hidden>
             <div class="desktop-text">
-              <p class="eyebrow">Приложение для Windows</p>
-              <h2>То же хранилище, но на своём компьютере</h2>
-              <p class="lede">
+              <p class="eyebrow" data-i18n="landing-desktop-eyebrow">Приложение для Windows</p>
+              <h2 data-i18n="landing-desktop-title">То же хранилище, но на своём компьютере</h2>
+              <p class="lede" data-i18n="landing-desktop-lede">
                 Портал и приложение открывают один и тот же аккаунт: сохраните пароль
                 здесь — он появится там. Приложение не зависит от браузера и работает,
                 когда сервер недоступен.
               </p>
             </div>
             <div class="desktop-download">
-              <a class="btn btn-solid" id="desktop-link" href="#" download>Скачать</a>
+              <!-- The label is a translation key; `app.js` only fills in the `href`. -->
+              <a
+                class="btn btn-solid"
+                id="desktop-link"
+                href="#"
+                download
+                data-i18n="landing-desktop-download"
+              >
+                Скачать
+              </a>
               <p class="note" id="desktop-meta"></p>
               <p class="fingerprint" id="desktop-hash" hidden></p>
             </div>
@@ -122,7 +162,7 @@
 
         <footer class="footer">
           <span>CloudPass</span>
-          <span>Шифрование в браузере · сервер не читает данные</span>
+          <span data-i18n="footer-tagline">Шифрование в браузере · сервер не читает данные</span>
         </footer>
       </div>
 
@@ -130,31 +170,54 @@
       <div class="view narrow" id="view-register" hidden>
         <header class="topbar">
           <a class="wordmark" href="#/">CloudPass</a>
-          <nav class="topbar-nav"><a class="link" href="#/">На главную</a></nav>
+          <nav class="topbar-nav">
+            <a class="link" href="#/" data-i18n="nav-home">На главную</a>
+            <select
+              class="language-select"
+              id="language-select-register"
+              data-testid="language-select"
+              data-i18n="nav-language"
+              data-i18n-attr="aria-label"
+              aria-label="Язык интерфейса"
+            >
+              <option value="ru" data-i18n="language-ru" data-testid="language-option-ru">
+                Русский
+              </option>
+              <option value="en" data-i18n="language-en" data-testid="language-option-en">
+                English
+              </option>
+            </select>
+          </nav>
         </header>
 
         <main class="auth">
-          <p class="eyebrow">Регистрация</p>
-          <h1 class="auth-title">Создать аккаунт</h1>
-          <p class="lede">
+          <p class="eyebrow" data-i18n="register-eyebrow">Регистрация</p>
+          <h1 class="auth-title" data-i18n="register-title">Создать аккаунт</h1>
+          <p class="lede" data-i18n="register-lede">
             Мастер-пароль — единственный ключ к хранилищу. Он не отправляется на сервер
             и не хранится нигде.
           </p>
 
           <form class="form" id="register-form" autocomplete="off">
             <div class="field">
-              <label class="field-label" for="register-identifier">Имя аккаунта</label>
+              <label class="field-label" for="register-identifier" data-i18n="register-identifier-label">
+                Имя аккаунта
+              </label>
               <input
                 id="register-identifier"
                 type="text"
                 autocomplete="username"
                 spellcheck="false"
                 placeholder="alice@example.com"
+                data-i18n="register-identifier-placeholder"
+                data-i18n-attr="placeholder"
                 data-testid="register-identifier"
               />
             </div>
             <div class="field">
-              <label class="field-label" for="register-password">Мастер-пароль</label>
+              <label class="field-label" for="register-password" data-i18n="register-password-label">
+                Мастер-пароль
+              </label>
               <input
                 id="register-password"
                 type="password"
@@ -163,7 +226,9 @@
               />
             </div>
             <div class="field">
-              <label class="field-label" for="register-confirm">Повторите пароль</label>
+              <label class="field-label" for="register-confirm" data-i18n="register-confirm-label">
+                Повторите пароль
+              </label>
               <input
                 id="register-confirm"
                 type="password"
@@ -171,19 +236,21 @@
                 data-testid="register-confirm"
               />
             </div>
-            <p class="note">Минимум 12 символов. Восстановить его нельзя.</p>
+            <p class="note" data-i18n="register-note">Минимум 12 символов. Восстановить его нельзя.</p>
             <button
               class="btn btn-solid btn-block"
               type="submit"
               id="register-submit"
               data-testid="register-submit"
+              data-i18n="register-submit"
             >
               Создать аккаунт
             </button>
           </form>
 
           <p class="alt">
-            Уже есть аккаунт? <a class="link" href="#/login">Войти</a>
+            <span data-i18n="register-alt-question">Уже есть аккаунт?</span>
+            <a class="link" href="#/login" data-i18n="nav-sign-in">Войти</a>
           </p>
         </main>
       </div>
@@ -192,20 +259,39 @@
       <div class="view narrow" id="view-login" hidden>
         <header class="topbar">
           <a class="wordmark" href="#/">CloudPass</a>
-          <nav class="topbar-nav"><a class="link" href="#/">На главную</a></nav>
+          <nav class="topbar-nav">
+            <a class="link" href="#/" data-i18n="nav-home">На главную</a>
+            <select
+              class="language-select"
+              id="language-select-login"
+              data-testid="language-select"
+              data-i18n="nav-language"
+              data-i18n-attr="aria-label"
+              aria-label="Язык интерфейса"
+            >
+              <option value="ru" data-i18n="language-ru" data-testid="language-option-ru">
+                Русский
+              </option>
+              <option value="en" data-i18n="language-en" data-testid="language-option-en">
+                English
+              </option>
+            </select>
+          </nav>
         </header>
 
         <main class="auth">
-          <p class="eyebrow">Вход</p>
-          <h1 class="auth-title">Войти в хранилище</h1>
-          <p class="lede">
+          <p class="eyebrow" data-i18n="login-eyebrow">Вход</p>
+          <h1 class="auth-title" data-i18n="login-title">Войти в хранилище</h1>
+          <p class="lede" data-i18n="login-lede">
             Хранилище расшифровывается здесь, в этой вкладке. Сервер отдаёт шифротекст
             и ничего больше.
           </p>
 
           <form class="form" id="login-form" autocomplete="off">
             <div class="field">
-              <label class="field-label" for="login-identifier">Имя аккаунта</label>
+              <label class="field-label" for="login-identifier" data-i18n="login-identifier-label">
+                Имя аккаунта
+              </label>
               <input
                 id="login-identifier"
                 type="text"
@@ -215,7 +301,9 @@
               />
             </div>
             <div class="field">
-              <label class="field-label" for="login-password">Мастер-пароль</label>
+              <label class="field-label" for="login-password" data-i18n="login-password-label">
+                Мастер-пароль
+              </label>
               <input
                 id="login-password"
                 type="password"
@@ -228,13 +316,15 @@
               type="submit"
               id="login-submit"
               data-testid="login-submit"
+              data-i18n="login-submit"
             >
               Войти
             </button>
           </form>
 
           <p class="alt">
-            Нет аккаунта? <a class="link" href="#/register">Создать</a>
+            <span data-i18n="login-alt-question">Нет аккаунта?</span>
+            <a class="link" href="#/register" data-i18n="login-register-link">Создать</a>
           </p>
         </main>
       </div>
@@ -243,27 +333,44 @@
       <div class="view medium" id="view-kit" hidden>
         <header class="topbar">
           <!-- No link out of here on purpose. The key exists only on this screen, so the
-               only way forward is the button that says it was saved. -->
+               only way forward is the button that says it was saved. The language picker is
+               absent for the same reason there is no link: a screen with no way out has
+               nothing to switch for. -->
           <span class="wordmark">CloudPass</span>
-          <span class="who">Не закрывайте вкладку</span>
+          <span class="who" data-i18n="kit-warning">Не закрывайте вкладку</span>
         </header>
 
         <main class="auth">
-          <p class="eyebrow">Emergency Kit</p>
-          <h1 class="auth-title">Сохраните ключ восстановления</h1>
-          <p class="lede">
+          <p class="eyebrow" data-i18n="kit-eyebrow">Emergency Kit</p>
+          <h1 class="auth-title" data-i18n="kit-title">Сохраните ключ восстановления</h1>
+          <p class="lede" data-i18n="kit-lede">
             Это единственная копия. Она существует только на этом экране — ни на сервере,
             ни на диске её нет. Распечатайте документ или сохраните его в другом менеджере
             паролей.
           </p>
 
+          <!-- `data-i18n` is absent on purpose: this holds the recovery document, which is
+               generated once and stored nowhere. Translating it would be the one action
+               that could lose it. -->
           <pre class="kit" id="kit-text" data-testid="kit-text"></pre>
 
           <div class="actions">
-            <button class="btn btn-solid" type="button" id="kit-copy" data-testid="kit-copy">
+            <button
+              class="btn btn-solid"
+              type="button"
+              id="kit-copy"
+              data-testid="kit-copy"
+              data-i18n="kit-copy"
+            >
               Скопировать
             </button>
-            <button class="btn btn-outline" type="button" id="kit-done" data-testid="kit-done">
+            <button
+              class="btn btn-outline"
+              type="button"
+              id="kit-done"
+              data-testid="kit-done"
+              data-i18n="kit-done"
+            >
               Я сохранил
             </button>
           </div>
@@ -281,10 +388,17 @@
               type="button"
               id="vault-sync"
               data-testid="vault-sync"
+              data-i18n="vault-sync"
             >
               Синхронизировать
             </button>
-            <button class="btn btn-small btn-solid" type="button" id="vault-add" data-testid="vault-add">
+            <button
+              class="btn btn-small btn-solid"
+              type="button"
+              id="vault-add"
+              data-testid="vault-add"
+              data-i18n="vault-add"
+            >
               Добавить
             </button>
             <!-- Locking the tab *is* signing out here: the module holds nothing between page
@@ -294,9 +408,25 @@
               type="button"
               id="vault-lock"
               data-testid="vault-logout"
+              data-i18n="nav-sign-out"
             >
               Выйти
             </button>
+            <select
+              class="language-select"
+              id="language-select-vault"
+              data-testid="language-select"
+              data-i18n="nav-language"
+              data-i18n-attr="aria-label"
+              aria-label="Язык интерфейса"
+            >
+              <option value="ru" data-i18n="language-ru" data-testid="language-option-ru">
+                Русский
+              </option>
+              <option value="en" data-i18n="language-en" data-testid="language-option-en">
+                English
+              </option>
+            </select>
           </nav>
         </header>
 
@@ -309,20 +439,26 @@
                correct. -->
           <div class="cabinet">
             <section class="panel" data-testid="panel-projects">
-              <h2 class="panel-title">Проекты</h2>
+              <h2 class="panel-title" data-i18n="vault-projects">Проекты</h2>
               <ul class="projects" id="project-list" data-testid="project-list"></ul>
-              <p class="empty" id="project-empty" hidden data-testid="project-empty">
+              <p
+                class="empty"
+                id="project-empty"
+                hidden
+                data-testid="project-empty"
+                data-i18n="vault-projects-empty"
+              >
                 Проектов пока нет. Назовите проект в записи — он появится здесь.
               </p>
             </section>
 
             <section class="panel" data-testid="panel-passwords">
               <div class="panel-head">
-                <h2 class="panel-title">Пароли</h2>
+                <h2 class="panel-title" data-i18n="vault-passwords">Пароли</h2>
                 <span class="panel-scope" id="item-scope" data-testid="item-scope"></span>
               </div>
               <ul class="items" id="item-list" data-testid="item-list"></ul>
-              <p class="empty" id="item-empty" hidden data-testid="item-empty">
+              <p class="empty" id="item-empty" hidden data-testid="item-empty" data-i18n="vault-empty-all">
                 Записей пока нет. Начните с «Добавить».
               </p>
             </section>
@@ -331,7 +467,7 @@
 
         <footer class="footer">
           <span id="vault-foot-account"></span>
-          <span>Шифрование в браузере · сервер не читает данные</span>
+          <span data-i18n="footer-tagline">Шифрование в браузере · сервер не читает данные</span>
         </footer>
       </div>
 
@@ -339,18 +475,37 @@
       <div class="view medium" id="view-item" hidden>
         <header class="topbar">
           <a class="wordmark" href="#/vault">CloudPass</a>
-          <nav class="topbar-nav"><a class="link" href="#/vault">К хранилищу</a></nav>
+          <nav class="topbar-nav">
+            <a class="link" href="#/vault" data-i18n="nav-to-vault">К хранилищу</a>
+            <select
+              class="language-select"
+              id="language-select-item"
+              data-testid="language-select"
+              data-i18n="nav-language"
+              data-i18n-attr="aria-label"
+              aria-label="Язык интерфейса"
+            >
+              <option value="ru" data-i18n="language-ru" data-testid="language-option-ru">
+                Русский
+              </option>
+              <option value="en" data-i18n="language-en" data-testid="language-option-en">
+                English
+              </option>
+            </select>
+          </nav>
         </header>
 
         <main class="auth">
-          <p class="eyebrow">Запись</p>
-          <h1 class="auth-title" id="item-title">Новая запись</h1>
+          <p class="eyebrow" data-i18n="item-eyebrow">Запись</p>
+          <!-- The key is what changes between a new entry and an existing one; the wording
+               stays in the tables. `app.js` swaps `data-i18n`, never the text. -->
+          <h1 class="auth-title" id="item-title" data-i18n="item-new">Новая запись</h1>
 
           <form class="form" id="item-form" autocomplete="off">
             <input type="hidden" id="item-id" />
 
             <div class="field">
-              <label class="field-label" for="item-name">Название</label>
+              <label class="field-label" for="item-name" data-i18n="item-name-label">Название</label>
               <input id="item-name" type="text" spellcheck="false" data-testid="item-name" />
             </div>
             <!-- A project is nothing but a name filed inside the sealed record, so this is a
@@ -358,7 +513,9 @@
                  deliberately not a `<select>`: a new project has to be creatable right here,
                  at the moment a password is saved, or nobody will ever create one. -->
             <div class="field">
-              <label class="field-label" for="item-project">Проект</label>
+              <label class="field-label" for="item-project" data-i18n="item-project-label">
+                Проект
+              </label>
               <input
                 id="item-project"
                 type="text"
@@ -366,12 +523,16 @@
                 autocomplete="off"
                 spellcheck="false"
                 placeholder="Без проекта"
+                data-i18n="item-project-placeholder"
+                data-i18n-attr="placeholder"
                 data-testid="item-project"
               />
               <datalist id="project-options"></datalist>
             </div>
             <div class="field">
-              <label class="field-label" for="item-username">Логин</label>
+              <label class="field-label" for="item-username" data-i18n="item-username-label">
+                Логин
+              </label>
               <input
                 id="item-username"
                 type="text"
@@ -381,7 +542,9 @@
               />
             </div>
             <div class="field">
-              <label class="field-label" for="item-password">Пароль</label>
+              <label class="field-label" for="item-password" data-i18n="item-password-label">
+                Пароль
+              </label>
               <div class="field-row">
                 <input
                   id="item-password"
@@ -395,13 +558,14 @@
                   type="button"
                   id="item-reveal"
                   data-testid="item-reveal"
+                  data-i18n="item-reveal"
                 >
                   Показать
                 </button>
               </div>
             </div>
             <div class="field">
-              <label class="field-label" for="item-url">Адрес</label>
+              <label class="field-label" for="item-url" data-i18n="item-url-label">Адрес</label>
               <input
                 id="item-url"
                 type="text"
@@ -411,20 +575,27 @@
               />
             </div>
             <div class="field">
-              <label class="field-label" for="item-notes">Заметки</label>
+              <label class="field-label" for="item-notes" data-i18n="item-notes-label">Заметки</label>
               <textarea id="item-notes" rows="3" spellcheck="false" data-testid="item-notes"></textarea>
             </div>
 
             <div class="actions">
-              <button class="btn btn-solid" type="submit" id="item-submit" data-testid="item-submit">
+              <button
+                class="btn btn-solid"
+                type="submit"
+                id="item-submit"
+                data-testid="item-submit"
+                data-i18n="item-submit"
+              >
                 Сохранить
               </button>
-              <a class="btn btn-outline" href="#/vault">Отмена</a>
+              <a class="btn btn-outline" href="#/vault" data-i18n="item-cancel">Отмена</a>
               <button
                 class="btn btn-outline btn-push"
                 type="button"
                 id="item-delete"
                 data-testid="item-delete"
+                data-i18n="item-delete"
                 hidden
               >
                 Удалить
@@ -437,7 +608,7 @@
 
     <!-- Inert until the module is loaded: an «Add» button that does nothing because wasm
          failed to fetch is worse than a line of text that says so. -->
-    <p class="boot" id="boot">Загрузка…</p>
+    <p class="boot" id="boot" data-i18n="boot-loading">Загрузка…</p>
 
     <script type="module" src="app.js"></script>
   </body>

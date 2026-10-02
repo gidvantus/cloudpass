@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -7,10 +7,34 @@
     <link rel="stylesheet" href="app.css" />
   </head>
   <body>
+    <!-- Every string a person reads carries `data-i18n="<key>"`, or `data-i18n-attr` plus a
+         key when it is an attribute rather than text. The keys are the ones in
+         `locales-ru.js` and `locales-en.js`; nothing is written here twice. The markup is
+         written in Russian because that is the default, and `app.js` replaces it from the
+         stored choice before the first screen is up. -->
     <main class="shell">
       <header class="masthead">
         <h1>CloudPass</h1>
-        <p class="status" id="status">starting…</p>
+        <div class="masthead-right">
+          <p class="status" id="status" data-i18n="status-starting">запуск…</p>
+          <!-- One picker for the whole application: every panel shares this header, and a
+               language is a property of the reader rather than of a screen. -->
+          <select
+            class="language-select"
+            id="language-select"
+            data-testid="language-select"
+            data-i18n="nav-language"
+            data-i18n-attr="aria-label"
+            aria-label="Язык интерфейса"
+          >
+            <option value="ru" data-i18n="language-ru" data-testid="language-option-ru">
+              Русский
+            </option>
+            <option value="en" data-i18n="language-en" data-testid="language-option-en">
+              English
+            </option>
+          </select>
+        </div>
       </header>
 
       <p class="banner" id="banner" hidden></p>
@@ -18,15 +42,15 @@
       <!-- Sign in. First gate for a machine that has no local account yet ------ -->
       <section class="panel panel-split" id="join-panel" data-testid="join-panel" hidden>
         <div class="panel-main">
-          <h2>Sign in to an existing account</h2>
-          <p class="hint">
-            Enter the account name and master password you registered with. Everything on
-            the server is ciphertext, so it is these two things — not a copied file — that
-            make this machine able to read your vault. This machine gets its own device key;
-            nothing is copied from the other one.
+          <h2 data-i18n="join-title">Вход в существующий аккаунт</h2>
+          <p class="hint" data-i18n="join-hint">
+            Введите имя аккаунта и мастер-пароль, с которыми вы регистрировались. Всё на
+            сервере — шифротекст, поэтому именно эти две вещи, а не скопированный файл,
+            делают эту машину способной прочитать ваше хранилище. Ключ устройства у этой
+            машины свой; с другой ничего не копируется.
           </p>
           <form id="join-form" autocomplete="off" data-testid="join-form">
-            <label for="join-identifier">Account name</label>
+            <label for="join-identifier" data-i18n="join-identifier-label">Имя аккаунта</label>
             <input
               id="join-identifier"
               data-testid="join-identifier"
@@ -34,7 +58,7 @@
               autocomplete="username"
               spellcheck="false"
             />
-            <label for="join-password">Master password</label>
+            <label for="join-password" data-i18n="join-password-label">Мастер-пароль</label>
             <input
               id="join-password"
               data-testid="join-password"
@@ -42,41 +66,56 @@
               autocomplete="current-password"
             />
             <div class="row-actions">
-              <button type="submit" id="join-submit" data-testid="join-submit">Sign in</button>
-              <button type="button" class="secondary" id="join-cancel" data-testid="join-cancel">
-                Back
+              <button type="submit" id="join-submit" data-testid="join-submit" data-i18n="join-submit">
+                Войти
+              </button>
+              <button
+                type="button"
+                class="secondary"
+                id="join-cancel"
+                data-testid="join-cancel"
+                data-i18n="join-cancel"
+              >
+                Назад
               </button>
             </div>
           </form>
-          <p class="hint">
-            This is the first time this machine has met the server, so it has to take the
-            server's key on trust at this moment. Every later sign-in is checked against it.
+          <p class="hint" data-i18n="join-trust-hint">
+            Эта машина встречает сервер впервые, поэтому сейчас она принимает его ключ на
+            доверие. Каждый следующий вход сверяется с ним.
           </p>
           <p class="hint">
-            No account on this server yet?
-            <button type="button" class="link" id="show-create" data-testid="show-create">
-              Create a vault on this machine
+            <span data-i18n="join-no-account">Ещё нет аккаунта на этом сервере?</span>
+            <button
+              type="button"
+              class="link"
+              id="show-create"
+              data-testid="show-create"
+              data-i18n="join-show-create"
+            >
+              Создать хранилище на этой машине
             </button>
           </p>
         </div>
         <aside class="panel-aside" data-testid="join-theses">
-          <h3>The master password</h3>
-          <p class="hint">
-            It is stretched with Argon2id on this machine and never leaves it.
+          <h3 data-i18n="thesis-password-title">Мастер-пароль</h3>
+          <p class="hint" data-i18n="thesis-password-text">
+            Он растягивается Argon2id на этой машине и никогда её не покидает.
           </p>
-          <h3>What the server holds</h3>
-          <p class="hint">
-            Ciphertext: envelopes it cannot open, plus no key that could open them.
+          <h3 data-i18n="thesis-server-title">Что хранит сервер</h3>
+          <p class="hint" data-i18n="thesis-server-text">
+            Шифротекст: конверты, которые он не может открыть, и никакого ключа, который мог
+            бы их открыть.
           </p>
-          <h3>What sign-in tells the server</h3>
-          <p class="hint">
-            Nothing that checks a password: OPAQUE keeps it off the network and leaves the
-            server with a record it cannot test guesses against.
+          <h3 data-i18n="thesis-opaque-title">Что вход сообщает серверу</h3>
+          <p class="hint" data-i18n="thesis-opaque-text">
+            Ничего, что проверяло бы пароль: OPAQUE не пускает его в сеть и оставляет
+            серверу запись, по которой нельзя проверять догадки.
           </p>
-          <h3>If the master password is gone</h3>
-          <p class="hint">
-            The Emergency Kit is the only way back: the recovery key is stored nowhere, so
-            neither this machine nor the server can reproduce it.
+          <h3 data-i18n="thesis-kit-title">Если мастер-пароль потерян</h3>
+          <p class="hint" data-i18n="thesis-kit-text">
+            Emergency Kit — единственный путь назад: ключ восстановления не хранится нигде,
+            поэтому ни эта машина, ни сервер не могут его воспроизвести.
           </p>
         </aside>
       </section>
@@ -84,13 +123,13 @@
       <!-- Account setup ------------------------------------------------------ -->
       <section class="panel panel-split" id="create-panel" data-testid="create-panel" hidden>
         <div class="panel-main">
-          <h2>Create a vault</h2>
-          <p class="hint">
-            The master password is stretched with Argon2id on this machine and never leaves
-            it. It cannot be recovered — lose it and the vault is gone.
+          <h2 data-i18n="create-title">Создать хранилище</h2>
+          <p class="hint" data-i18n="create-hint">
+            Мастер-пароль растягивается Argon2id на этой машине и никогда её не покидает.
+            Восстановить его нельзя: потеряете — хранилище пропадёт.
           </p>
           <form id="create-form" autocomplete="off" data-testid="create-form">
-            <label for="create-identifier">Account name</label>
+            <label for="create-identifier" data-i18n="create-identifier-label">Имя аккаунта</label>
             <input
               id="create-identifier"
               data-testid="create-identifier"
@@ -98,184 +137,237 @@
               autocomplete="username"
               spellcheck="false"
             />
-            <label for="create-password">Master password</label>
+            <label for="create-password" data-i18n="create-password-label">Мастер-пароль</label>
             <input
               id="create-password"
               data-testid="create-password"
               type="password"
               autocomplete="new-password"
             />
-            <label for="create-confirm">Repeat it</label>
+            <label for="create-confirm" data-i18n="create-confirm-label">Повторите</label>
             <input
               id="create-confirm"
               data-testid="create-confirm"
               type="password"
               autocomplete="new-password"
             />
-            <button type="submit" id="create-submit" data-testid="create-submit">Create</button>
+            <button type="submit" id="create-submit" data-testid="create-submit" data-i18n="create-submit">
+              Создать
+            </button>
           </form>
           <p class="hint">
-            Already have an account — for example one you created in the web portal?
-            <button type="button" class="link" id="show-join" data-testid="show-join">
-              Sign in on this machine
+            <span data-i18n="create-alt">
+              Уже есть аккаунт — например созданный в web-портале?
+            </span>
+            <button
+              type="button"
+              class="link"
+              id="show-join"
+              data-testid="show-join"
+              data-i18n="create-show-join"
+            >
+              Войти на этой машине
             </button>
           </p>
         </div>
         <aside class="panel-aside" data-testid="create-theses">
-          <h3>The master password</h3>
-          <p class="hint">
-            It is stretched with Argon2id on this machine and never leaves it.
+          <h3 data-i18n="thesis-password-title">Мастер-пароль</h3>
+          <p class="hint" data-i18n="thesis-password-text">
+            Он растягивается Argon2id на этой машине и никогда её не покидает.
           </p>
-          <h3>What the server holds</h3>
-          <p class="hint">
-            Ciphertext: envelopes it cannot open, plus no key that could open them.
+          <h3 data-i18n="thesis-server-title">Что хранит сервер</h3>
+          <p class="hint" data-i18n="thesis-server-text">
+            Шифротекст: конверты, которые он не может открыть, и никакого ключа, который мог
+            бы их открыть.
           </p>
-          <h3>What sign-in tells the server</h3>
-          <p class="hint">
-            Nothing that checks a password: OPAQUE keeps it off the network and leaves the
-            server with a record it cannot test guesses against.
+          <h3 data-i18n="thesis-opaque-title">Что вход сообщает серверу</h3>
+          <p class="hint" data-i18n="thesis-opaque-text">
+            Ничего, что проверяло бы пароль: OPAQUE не пускает его в сеть и оставляет
+            серверу запись, по которой нельзя проверять догадки.
           </p>
-          <h3>If the master password is gone</h3>
-          <p class="hint">
-            The Emergency Kit is the only way back: the recovery key is stored nowhere, so
-            neither this machine nor the server can reproduce it.
+          <h3 data-i18n="thesis-kit-title">Если мастер-пароль потерян</h3>
+          <p class="hint" data-i18n="thesis-kit-text">
+            Emergency Kit — единственный путь назад: ключ восстановления не хранится нигде,
+            поэтому ни эта машина, ни сервер не могут его воспроизвести.
           </p>
         </aside>
       </section>
 
       <!-- Unlock ------------------------------------------------------------- -->
       <section class="panel" id="unlock-panel" hidden>
-        <h2>Unlock</h2>
-        <p class="hint">The key is derived here. Nothing is sent anywhere.</p>
+        <h2 data-i18n="unlock-title">Разблокировать</h2>
+        <p class="hint" data-i18n="unlock-hint">
+          Ключ выводится здесь. Никуда ничего не отправляется.
+        </p>
         <form id="unlock-form" autocomplete="off">
-          <label for="unlock-password">Master password</label>
+          <label for="unlock-password" data-i18n="unlock-password-label">Мастер-пароль</label>
           <input id="unlock-password" type="password" autocomplete="current-password" />
-          <button type="submit" id="unlock-submit">Unlock</button>
+          <button type="submit" id="unlock-submit" data-i18n="unlock-submit">Разблокировать</button>
         </form>
         <p class="hint" id="recover-hint">
-          Forgotten the master password?
-          <button type="button" class="link" id="show-recover">Use a recovery key</button>
+          <span data-i18n="unlock-recover-hint">Забыли мастер-пароль?</span>
+          <button
+            type="button"
+            class="link"
+            id="show-recover"
+            data-i18n="unlock-show-recover"
+          >
+            Использовать ключ восстановления
+          </button>
         </p>
       </section>
 
       <!-- Recovery ----------------------------------------------------------- -->
       <section class="panel" id="recover-panel" hidden>
-        <h2>Recover with the Emergency Kit</h2>
-        <p class="hint">
-          Type the recovery key exactly as it appears on the kit. Capitalisation and
-          dashes do not matter. The kit keeps no copy of your passwords and neither does
-          this screen: the vault is decrypted on this machine, as always.
+        <h2 data-i18n="recover-title">Восстановление по Emergency Kit</h2>
+        <p class="hint" data-i18n="recover-hint">
+          Введите ключ восстановления точно так, как он напечатан в Kit. Регистр и дефисы не
+          важны. В Kit нет копии ваших паролей, и на этом экране её тоже нет: хранилище
+          расшифровывается на этой машине, как всегда.
         </p>
         <form id="recover-form" autocomplete="off">
-          <label for="recover-key">Recovery key</label>
+          <label for="recover-key" data-i18n="recover-key-label">Ключ восстановления</label>
           <input id="recover-key" type="text" spellcheck="false" autocomplete="off" />
-          <label for="recover-password">New master password</label>
+          <label for="recover-password" data-i18n="recover-new-password-label">
+            Новый мастер-пароль
+          </label>
           <input id="recover-password" type="password" autocomplete="new-password" />
-          <label for="recover-confirm">Repeat it</label>
+          <label for="recover-confirm" data-i18n="recover-confirm-label">Повторите</label>
           <input id="recover-confirm" type="password" autocomplete="new-password" />
           <div class="row-actions">
-            <button type="submit" id="recover-submit">Recover</button>
-            <button type="button" class="secondary" id="recover-cancel">Cancel</button>
+            <button type="submit" id="recover-submit" data-i18n="recover-submit">
+              Восстановить
+            </button>
+            <button type="button" class="secondary" id="recover-cancel" data-i18n="recover-cancel">
+              Отмена
+            </button>
           </div>
         </form>
-        <p class="hint">
-          A recovery issues a new Emergency Kit and retires the old one. The key you have
-          just used will not work again.
+        <p class="hint" data-i18n="recover-note">
+          Восстановление выпускает новый Emergency Kit и отменяет старый. Ключ, который вы
+          только что использовали, больше не сработает.
         </p>
       </section>
 
       <!-- Emergency Kit ------------------------------------------------------ -->
       <section class="panel" id="kit-panel" hidden>
-        <h2 id="kit-title">Your Emergency Kit</h2>
-        <p class="hint">
-          This is the only copy. It is stored nowhere — not on this machine, not on the
-          server — so print it, or copy it into another password manager, before you
-          close this screen. Anyone who has the recovery key can open the vault.
+        <!-- The key below is swapped by `app.js` for `kit-new-title` when a recovery or a
+             rotation issued the kit, so the heading follows the state and the wording stays
+             in the tables. -->
+        <h2 id="kit-title" data-i18n="kit-title">Ваш Emergency Kit</h2>
+        <p class="hint" data-i18n="kit-hint">
+          Это единственная копия. Она не хранится нигде — ни на этой машине, ни на сервере, —
+          поэтому распечатайте её или перенесите в другой менеджер паролей, прежде чем
+          закрыть этот экран. Открыть хранилище сможет любой, у кого есть ключ восстановления.
         </p>
+        <!-- No `data-i18n`: this holds the recovery document itself, which is generated once
+             and stored nowhere. Translating it would be the one action that could lose it. -->
         <pre class="kit" id="kit-text"></pre>
         <div class="row-actions">
-          <button type="button" id="kit-copy">Copy</button>
-          <button type="button" class="secondary" id="kit-done">I have saved it</button>
+          <button type="button" id="kit-copy" data-i18n="kit-copy">Скопировать</button>
+          <button type="button" class="secondary" id="kit-done" data-i18n="kit-done">
+            Я сохранил
+          </button>
         </div>
       </section>
 
       <!-- Security ----------------------------------------------------------- -->
       <section class="panel" id="security-panel" hidden>
-        <h2>Security</h2>
+        <h2 data-i18n="security-title">Безопасность</h2>
 
-        <h3>Change the master password</h3>
-        <p class="hint">
-          Re-wraps the vault key, on this machine and on the server, so the new password
-          works everywhere. Your Emergency Kit keeps working: the recovery key does not
-          depend on the password.
+        <h3 data-i18n="security-password-title">Смена мастер-пароля</h3>
+        <p class="hint" data-i18n="security-password-hint">
+          Заново оборачивает ключ хранилища — на этой машине и на сервере, чтобы новый пароль
+          работал везде. Emergency Kit продолжает работать: ключ восстановления не зависит от
+          пароля.
         </p>
         <form id="password-form" autocomplete="off">
-          <label for="password-current">Current password</label>
+          <label for="password-current" data-i18n="security-current-label">Текущий пароль</label>
           <input id="password-current" type="password" autocomplete="current-password" />
-          <label for="password-new">New password</label>
+          <label for="password-new" data-i18n="security-new-label">Новый пароль</label>
           <input id="password-new" type="password" autocomplete="new-password" />
-          <label for="password-confirm">Repeat it</label>
+          <label for="password-confirm" data-i18n="security-confirm-label">Повторите</label>
           <input id="password-confirm" type="password" autocomplete="new-password" />
           <div class="row-actions">
-            <button type="submit" id="password-submit">Change password</button>
-            <button type="button" class="secondary" id="security-cancel">Back</button>
+            <button type="submit" id="password-submit" data-i18n="security-submit">
+              Сменить пароль
+            </button>
+            <button type="button" class="secondary" id="security-cancel" data-i18n="security-cancel">
+              Назад
+            </button>
           </div>
         </form>
 
-        <h3>Emergency Kit</h3>
-        <p class="hint">
-          Issuing a new kit retires the old one immediately: the recovery key on the old
-          piece of paper stops working the moment this succeeds. Do it if the kit has
-          been read aloud, photographed, or left somewhere it should not have been.
+        <h3 data-i18n="security-kit-title">Emergency Kit</h3>
+        <p class="hint" data-i18n="security-kit-hint">
+          Выпуск нового Kit сразу отменяет старый: ключ восстановления на прежней бумажке
+          перестаёт работать в тот момент, когда это удаётся. Делайте так, если Kit читали
+          вслух, фотографировали или оставляли там, где его не должно быть.
         </p>
         <form id="new-kit-form" autocomplete="off">
-          <label for="kit-password">Master password</label>
+          <label for="kit-password" data-i18n="security-kit-password-label">Мастер-пароль</label>
           <input id="kit-password" type="password" autocomplete="current-password" />
-          <button type="submit" id="new-kit-submit">Issue a new kit</button>
+          <button type="submit" id="new-kit-submit" data-i18n="security-kit-submit">
+            Выпустить новый Kit
+          </button>
         </form>
       </section>
 
       <!-- Vault -------------------------------------------------------------- -->
       <section class="panel" id="vault-panel" hidden>
         <div class="row">
-          <h2>Items</h2>
+          <h2 data-i18n="vault-title">Записи</h2>
           <div class="row-actions">
-            <button type="button" id="sync-now">Sync</button>
-            <button type="button" id="add-item">Add</button>
-            <button type="button" class="secondary" id="show-security">Security</button>
-            <button type="button" class="secondary" id="lock-vault">Lock</button>
+            <button type="button" id="sync-now" data-i18n="vault-sync">Синхронизировать</button>
+            <button type="button" id="add-item" data-i18n="vault-add">Добавить</button>
+            <button type="button" class="secondary" id="show-security" data-i18n="vault-security">
+              Безопасность
+            </button>
+            <button type="button" class="secondary" id="lock-vault" data-i18n="vault-lock">
+              Заблокировать
+            </button>
           </div>
         </div>
         <p class="hint" id="sync-note"></p>
         <ul class="item-list" id="item-list"></ul>
-        <p class="hint" id="empty-hint" hidden>No items yet. Use “Add”.</p>
+        <p class="hint" id="empty-hint" hidden data-i18n="vault-empty">
+          Записей пока нет. Нажмите «Добавить».
+        </p>
       </section>
 
       <!-- Editor ------------------------------------------------------------- -->
       <section class="panel" id="editor-panel" hidden>
-        <h2 id="editor-title">Add an item</h2>
+        <h2 id="editor-title" data-i18n="editor-title-new">Новая запись</h2>
         <form id="editor-form" autocomplete="off">
           <input type="hidden" id="editor-id" />
-          <label for="editor-name">Title</label>
+          <label for="editor-name" data-i18n="editor-name-label">Название</label>
           <input id="editor-name" type="text" spellcheck="false" />
-          <label for="editor-username">Username</label>
+          <label for="editor-username" data-i18n="editor-username-label">Логин</label>
           <input id="editor-username" type="text" autocomplete="off" spellcheck="false" />
-          <label for="editor-password">Password</label>
+          <label for="editor-password" data-i18n="editor-password-label">Пароль</label>
           <input id="editor-password" type="text" autocomplete="off" spellcheck="false" />
-          <label for="editor-url">URL</label>
+          <label for="editor-url" data-i18n="editor-url-label">Адрес</label>
           <input id="editor-url" type="text" autocomplete="off" spellcheck="false" />
-          <label for="editor-notes">Notes</label>
+          <label for="editor-notes" data-i18n="editor-notes-label">Заметки</label>
           <textarea id="editor-notes" rows="3" spellcheck="false"></textarea>
           <div class="row-actions">
-            <button type="submit" id="editor-submit">Save</button>
-            <button type="button" class="secondary" id="editor-cancel">Cancel</button>
-            <button type="button" class="danger" id="editor-delete" hidden>Delete</button>
+            <button type="submit" id="editor-submit" data-i18n="editor-submit">Сохранить</button>
+            <button type="button" class="secondary" id="editor-cancel" data-i18n="editor-cancel">
+              Отмена
+            </button>
+            <button type="button" class="danger" id="editor-delete" data-i18n="editor-delete" hidden>
+              Удалить
+            </button>
           </div>
         </form>
       </section>
 
+      <!-- Assembled from data, not from wording: identifiers, the server address, the KDF
+           parameters and the data directory are the same in every language. -->
       <footer class="footer" id="footer"></footer>
     </main>
-    <script src="app.js"></script>
+    <!-- A module, like the portal's: the tables are ES modules beside it, and the CSP already
+         allows scripts from this origin only. -->
+    <script type="module" src="app.js"></script>
   </body>
 </html>

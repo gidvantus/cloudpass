@@ -45,17 +45,35 @@ use crate::transport::HttpTransport;
 
 /// What the frontend is told when something goes wrong.
 ///
-/// A code it can branch on and a message a person can read. No file path, no
-/// cryptographic detail: those belong in the log, not in a UI.
+/// A `key` it can branch on — and, more to the point, translate: the wording belongs to the
+/// interface, which is the only side that knows what language the reader chose. `detail` is
+/// the English sentence from the crates shared with the portal; it is for a log or a bug
+/// report and is never rendered, because the frontend shows the sentence for `key` instead.
 #[derive(Debug, Serialize)]
 pub struct CommandError {
-    pub code: &'static str,
-    pub message: String,
+    pub key: &'static str,
+    pub detail: Option<String>,
+}
+
+impl CommandError {
+    /// A failure the interface has a sentence for, with nothing extra to say.
+    fn of_key(key: &'static str) -> Self {
+        Self { key, detail: None }
+    }
+}
+
+impl std::fmt::Display for CommandError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.detail {
+            Some(detail) => write!(formatter, "{}: {detail}", self.key),
+            None => write!(formatter, "{}", self.key),
+        }
+    }
 }
 
 impl From<ClientError> for CommandError {
     fn from(error: ClientError) -> Self {
-        let code = match &error {
+        let key = match &error {
             ClientError::Locked => "locked",
             ClientError::NoAccount => "no_account",
             ClientError::AccountExists => "account_exists",
@@ -73,13 +91,63 @@ impl From<ClientError> for CommandError {
             ClientError::Protocol(_) => "protocol",
         };
         Self {
-            code,
-            message: error.to_string(),
+            key,
+            detail: Some(error.to_string()),
         }
     }
 }
 
 type CommandResult<T> = Result<T, CommandError>;
+
+/// What the last synchronization did, as a key and the numbers that go with it.
+///
+/// The commands do not write the status note. They report *which* situation happened and *how
+/// much* moved, and the interface turns that into a sentence in whatever language it is
+/// showing — the only place a sentence may live, because the interface is the only thing that
+/// knows the language.
+///
+/// `error_detail` is the one field carrying prose, and it is never rendered: it is the English
+/// wording from the crates shared with the portal, kept for the record while the person reads
+/// the localized sentence for `key`.
+#[derive(Debug, Clone, Serialize)]
+pub struct SyncNote {
+    /// `sync-ok` for a synchronization that ran, or the key of the state that stopped one.
+    key: &'static str,
+    received: Option<usize>,
+    sent: Option<usize>,
+    conflicts: Option<usize>,
+    head_rejected: bool,
+    error_detail: Option<String>,
+}
+
+impl SyncNote {
+    /// A note that is only a key: a state with no counts to report.
+    fn of_key(key: &'static str) -> Self {
+        Self {
+            key,
+            received: None,
+            sent: None,
+            conflicts: None,
+            head_rejected: false,
+            error_detail: None,
+        }
+    }
+
+    /// A key plus why it happened. The interface shows the key; the detail stays off screen.
+    fn with_detail(key: &'static str, detail: impl std::fmt::Display) -> Self {
+        Self {
+            error_detail: Some(detail.to_string()),
+            ..Self::of_key(key)
+        }
+    }
+
+    /// The same numbers under the key of the state that produced them — joining an account
+    /// is a successful synchronization, but it is not one the user started by pressing Sync.
+    fn with_key(mut self, key: &'static str) -> Self {
+        self.key = key;
+        self
+    }
+}
 
 /// What the frontend needs in order to decide which screen to show.
 #[derive(Debug, Serialize)]
@@ -99,8 +167,8 @@ pub struct VaultStatus {
     /// Whether this device holds a recovery envelope, so the interface knows whether
     /// offering "use a recovery key" would be anything but a dead end.
     pub has_recovery_kit: bool,
-    /// A short note about the last synchronization, if there was one.
-    pub last_sync: Option<String>,
+    /// What the last synchronization did, if there was one.
+    pub last_sync: Option<SyncNote>,
     pub kdf_m_kib: u32,
     pub kdf_t: u32,
     pub kdf_p: u32,
@@ -253,7 +321,7 @@ pub async fn create_vault(
     // was actually written.
     app.vault = Some(Vault::unlock(&app.store, master_password.as_bytes())?);
     app.session = Some(session);
-    app.last_sync = Some("account registered".to_owned());
+    app.last_sync = Some(SyncNote::of_key("sync-registered"));
 
     Ok(CreatedVault {
         status: status_of(app)?,
@@ -335,8 +403,8 @@ pub async fn enrol_vault(
     // Pull immediately. An empty list with a Sync button would look like a failed
     // sign-in, when in fact the account is fine and the data is one request away.
     match synchronize(app).await {
-        Ok(note) => app.last_sync = Some(format!("joined an existing account · {note}")),
-        Err(error) => app.last_sync = Some(format!("joined, but the first sync failed: {error}")),
+        Ok(note) => app.last_sync = Some(note.with_key("sync-joined")),
+        Err(error) => app.last_sync = Some(SyncNote::with_detail("sync-join-failed", &error)),
     }
 
     status_of(app).map_err(CommandError::from)
@@ -369,10 +437,8 @@ pub async fn recover_vault(
     // Decoding first means a mistyped key is reported as a mistyped key — the checksum
     // exists precisely so the user is not told their kit is wrong when it merely came
     // out of a pocket illegible.
-    let key = recovery_code::decode(&recovery_key).map_err(|_| CommandError {
-        code: "bad_recovery_key",
-        message: "that recovery key does not look complete; check it against the kit".to_owned(),
-    })?;
+    let key = recovery_code::decode(&recovery_key)
+        .map_err(|_| CommandError::of_key("bad_recovery_key"))?;
 
     // Opens the vault through the kit and computes the replacements. Nothing is written:
     // `unlock_with_recovery_key` only reads, and the plans are plain values.
@@ -417,7 +483,7 @@ pub async fn recover_vault(
 
     app.vault = Some(vault);
     app.session = Some(session);
-    app.last_sync = Some("recovered with the Emergency Kit".to_owned());
+    app.last_sync = Some(SyncNote::of_key("sync-recovered"));
 
     Ok(CreatedVault {
         status: status_of(app)?,
@@ -479,7 +545,7 @@ pub async fn revive_emergency_kit(
     let vault = app.vault.as_mut().ok_or(ClientError::Locked)?;
     vault.commit(&mut app.store, None, Some(&kit))?;
 
-    app.last_sync = Some("a new Emergency Kit was issued".to_owned());
+    app.last_sync = Some(SyncNote::of_key("sync-kit-issued"));
 
     Ok(KitResponse {
         emergency_kit: kit.into_kit().as_document(&app.server_url),
@@ -536,7 +602,7 @@ pub async fn change_master_password(
     let vault = app.vault.as_mut().ok_or(ClientError::Locked)?;
     vault.commit(&mut app.store, Some(&master), None)?;
 
-    app.last_sync = Some("master password changed".to_owned());
+    app.last_sync = Some(SyncNote::of_key("sync-password-changed"));
     status_of(app).map_err(CommandError::from)
 }
 
@@ -586,11 +652,13 @@ pub async fn unlock_vault(
     match outcome {
         Ok(session) => {
             app.session = Some(session);
-            app.last_sync = Some("signed in".to_owned());
+            app.last_sync = Some(SyncNote::of_key("sync-signed-in"));
         }
         Err(error) => {
             app.session = None;
-            app.last_sync = Some(format!("offline: {error}"));
+            // The vault is open and usable; only the server is out of reach. The reason is
+            // English prose from a shared crate and stays in `error_detail`, unrendered.
+            app.last_sync = Some(SyncNote::with_detail("sync-offline", &error));
         }
     }
 
@@ -619,9 +687,7 @@ pub async fn set_server_url(
 ) -> CommandResult<VaultStatus> {
     let mut state = state.lock().await;
     if state.store.load_account()?.is_some() {
-        return Err(CommandError::from(ClientError::Storage(
-            "this vault is already registered; the server cannot be changed".to_owned(),
-        )));
+        return Err(CommandError::of_key("server_fixed"));
     }
     state.server_url = url.trim().trim_end_matches('/').to_owned();
     status_of(&state).map_err(CommandError::from)
@@ -722,7 +788,7 @@ pub async fn sync_now(state: State<'_, SharedState>) -> CommandResult<VaultStatu
     let mut state = state.lock().await;
     let app: &mut AppState = &mut state;
 
-    let note = synchronize(app).await.map_err(CommandError::from)?;
+    let note = synchronize(app).await?;
     app.last_sync = Some(note);
 
     status_of(app).map_err(CommandError::from)
@@ -733,18 +799,24 @@ pub async fn sync_now(state: State<'_, SharedState>) -> CommandResult<VaultStatu
 /// Separate from the command so that joining an account can pull immediately: the first
 /// thing a user should see after signing in on a new machine is their own data, not an
 /// empty list and a Sync button.
-async fn synchronize(app: &mut AppState) -> Result<String, ClientError> {
-    let session = app.session.clone().ok_or_else(|| {
-        ClientError::Transport("not signed in; lock and unlock to sign in again".to_owned())
-    })?;
+async fn synchronize(app: &mut AppState) -> Result<SyncNote, CommandError> {
+    let session = app
+        .session
+        .clone()
+        .ok_or_else(|| CommandError::of_key("not_signed_in"))?;
 
-    let account = app.store.load_account()?.ok_or(ClientError::NoAccount)?;
+    let account = app
+        .store
+        .load_account()
+        .map_err(CommandError::from)?
+        .ok_or_else(|| CommandError::from(ClientError::NoAccount))?;
     let seed = app
         .store
-        .load_device_seed()?
-        .ok_or(ClientError::NoAccount)?;
+        .load_device_seed()
+        .map_err(CommandError::from)?
+        .ok_or_else(|| CommandError::from(ClientError::NoAccount))?;
 
-    let transport = HttpTransport::new(&app.server_url)?;
+    let transport = HttpTransport::new(&app.server_url).map_err(CommandError::from)?;
     let mut engine = SyncEngine::new(
         transport,
         SyncAccount {
@@ -757,38 +829,52 @@ async fn synchronize(app: &mut AppState) -> Result<String, ClientError> {
         },
     );
 
-    engine.refresh_trusted_devices().await?;
+    engine
+        .refresh_trusted_devices()
+        .await
+        .map_err(CommandError::from)?;
 
     let store = &mut app.store;
     let vault = app.vault.as_mut().ok_or(ClientError::Locked)?;
-    let outcome = engine.sync(vault, store).await?;
+    let outcome = engine
+        .sync(vault, store)
+        .await
+        .map_err(CommandError::from)?;
 
     // The head revision is the memory that makes a rollback detectable, so it has to
     // outlive the process.
-    vault.record_sync_progress(store, engine.account().head_rev, engine.account().cursor)?;
+    vault
+        .record_sync_progress(store, engine.account().head_rev, engine.account().cursor)
+        .map_err(CommandError::from)?;
 
     Ok(describe(&outcome))
 }
 
-/// A one-line note about what a synchronization did, for the status area.
-fn describe(outcome: &SyncOutcome) -> String {
-    let mut parts = vec![format!("received {}", outcome.pulled.absorbed)];
+/// What a synchronization did, as a key and the numbers that describe it.
+///
+/// The interface composes the line: `sync-received`, `sync-sent`, `sync-conflicts` and
+/// `sync-head-rejected` are its words for these numbers, in the language it is showing. The
+/// one thing this function must not do is decide a wording — it did once, and the result was
+/// an English phrase that showed up verbatim in a Russian interface.
+fn describe(outcome: &SyncOutcome) -> SyncNote {
+    let mut note = SyncNote {
+        received: Some(outcome.pulled.absorbed),
+        ..SyncNote::of_key("sync-ok")
+    };
 
-    match &outcome.pushed {
-        Some(pushed) if pushed.applied > 0 => parts.push(format!("sent {}", pushed.applied)),
-        Some(pushed) if pushed.head_rejected.is_some() => parts.push(
-            pushed
-                .head_rejected
-                .clone()
-                .unwrap_or_else(|| "the server refused the change".to_owned()),
-        ),
-        Some(pushed) if !pushed.conflicts.is_empty() => {
-            parts.push(format!("{} conflict(s)", pushed.conflicts.len()));
+    if let Some(pushed) = &outcome.pushed {
+        if pushed.applied > 0 {
+            note.sent = Some(pushed.applied);
+        } else if pushed.head_rejected.is_some() {
+            // A refusal by the server is reported as the fact of it. The reason it gave is
+            // English prose from a shared crate, and the interface shows this key instead.
+            note.head_rejected = true;
+        } else if !pushed.conflicts.is_empty() {
+            note.conflicts = Some(pushed.conflicts.len());
         }
-        _ => {}
     }
 
-    parts.join(", ")
+    note
 }
 
 /// The number of changes waiting to be sent, for the interface to show.
@@ -800,8 +886,5 @@ pub async fn pending_count(state: State<'_, SharedState>) -> CommandResult<usize
 }
 
 fn parse_id(value: &str) -> CommandResult<Uuid> {
-    Uuid::parse_str(value).map_err(|_| CommandError {
-        code: "bad_id",
-        message: "that item identifier is not valid".to_owned(),
-    })
+    Uuid::parse_str(value).map_err(|_| CommandError::of_key("bad_id"))
 }

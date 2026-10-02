@@ -7,10 +7,89 @@
 // Two rules are followed throughout because they are cheap here and expensive later:
 // user-supplied text is written with textContent, never innerHTML, and every password
 // field is cleared as soon as the call that used it returns.
+//
+// The third rule is the language, and it is why this file has no wording in it. Every phrase
+// comes from `locales-ru.js` or `locales-en.js` through `i18n.js` — including the ones that
+// depend on state. Where a label changes with the state — «Новая запись» against «Правка
+// записи» — what changes is the *key* (`data-i18n`), never the text, so switching the language
+// re-derives the label from the state instead of freezing it in the language it was drawn in.
+
+import { createI18n } from './i18n.js';
+import localesRu from './locales-ru.js';
+import localesEn from './locales-en.js';
 
 const { invoke } = window.__TAURI__.core;
 
 const byId = (id) => document.getElementById(id);
+
+// --- the language -----------------------------------------------------------
+
+/** Where the choice lives. The only thing this client ever writes to `localStorage`. */
+const LANGUAGE_KEY = 'cloudpass.language';
+const DEFAULT_LOCALE = 'ru';
+
+const i18n = createI18n({ ru: localesRu, en: localesEn }, DEFAULT_LOCALE);
+const t = (key, params) => i18n.t(key, params);
+
+/** The stored language, or the default for anything that is not one of the two. */
+function storedLocale() {
+  try {
+    return window.localStorage.getItem(LANGUAGE_KEY) === 'en' ? 'en' : DEFAULT_LOCALE;
+  } catch {
+    // A web view that refuses `localStorage` is not a broken application: the language
+    // simply does not survive a restart.
+    return DEFAULT_LOCALE;
+  }
+}
+
+/**
+ * Writes an element's wording by key, keeping `data-i18n` in step with it.
+ *
+ * The attribute matters more than the text: it is what `applyTranslations()` reads on the
+ * next language switch, so an element whose label depends on state has to change the key
+ * when the state changes, or the switch would put the wrong label back.
+ */
+function say(element, key) {
+  element.dataset.i18n = key;
+  element.textContent = t(key);
+}
+
+/** Switches the language and remembers it, so the next start is not a fresh start. */
+function setLocale(next) {
+  const applied = applyLocale(next);
+  try {
+    window.localStorage.setItem(LANGUAGE_KEY, applied);
+  } catch {
+    // Losing the choice on restart is a smaller failure than a panel that will not switch.
+  }
+}
+
+/**
+ * Puts a language on the page: the translator, the text, the document language, the picker.
+ *
+ * The translator is switched here rather than by the caller, because this is the one function
+ * both paths go through — the picker, and a stored choice read at start. Switching it only on
+ * the first of those leaves a window whose `lang` says `en` while every word in it is Russian,
+ * which is precisely the state this change exists to make impossible.
+ *
+ * Deliberately nothing else. `renderDynamic` redraws only what is derived from state, and the
+ * panel that is open is never touched — so the emergency kit on screen, the values typed into
+ * the editor and the record being edited all survive a switch untouched.
+ */
+function applyLocale(locale) {
+  const applied = i18n.setLocale(locale);
+  document.documentElement.lang = applied;
+  byId('language-select').value = applied;
+  i18n.applyTranslations();
+  renderDynamic();
+  return applied;
+}
+
+/** Everything whose wording is decided by state rather than by the markup. */
+function renderDynamic() {
+  drawStatus();
+  drawItems();
+}
 
 const panels = {
   create: byId('create-panel'),
@@ -30,6 +109,11 @@ const emptyHint = byId('empty-hint');
 const footer = byId('footer');
 const syncNote = byId('sync-note');
 
+/** The last status the vault reported, kept so a language switch does not need another call. */
+let lastStatus = null;
+/** The last list the vault reported, for the same reason. */
+let lastItems = [];
+
 /** Shows a message above the panels. */
 function complain(message) {
   banner.textContent = message;
@@ -41,12 +125,26 @@ function clearComplaint() {
   banner.textContent = '';
 }
 
-/** Turns a rejected command into something worth reading. */
+/**
+ * Turns a rejected command into something worth reading.
+ *
+ * A command rejects with `{ key, detail }`. The key is the contract and the sentence is looked
+ * up by it; `detail` is English prose from the crates shared with the portal and is read by
+ * nobody — not the log, and certainly not the screen. A key this client has never heard of
+ * falls back to a generic sentence rather than to that prose.
+ */
 function describe(error) {
-  if (error && typeof error === 'object' && 'message' in error) {
-    return error.message;
+  const key = error && typeof error === 'object' ? error.key : null;
+  if (key) {
+    const lookup = `err-${String(key).replaceAll('_', '-')}`;
+    const phrase = t(lookup);
+    // `t` answers with the key itself when there is no entry, and a sentence is never equal
+    // to its key — so this tells "translated" from "unknown" without a second table.
+    if (phrase !== lookup) {
+      return phrase;
+    }
   }
-  return String(error);
+  return t('err-unknown');
 }
 
 function showPanel(name) {
@@ -75,24 +173,68 @@ function wipeSecretFields() {
   }
 }
 
+/**
+ * What synchronization last did, as numbers with words around them.
+ *
+ * `sync-ok` is a marker rather than a sentence — a synchronization that ran is described by
+ * how much moved — so it contributes no phrase of its own. Every other key names a state and
+ * carries no counts. `error_detail` is never read: it is English prose from a shared crate,
+ * and the localized key above is what a person is meant to see.
+ */
+function describeSync(note) {
+  if (!note) {
+    return '';
+  }
+
+  const parts = [];
+  if (note.key !== 'sync-ok') {
+    parts.push(t(note.key));
+  }
+  if (note.received !== null && note.received !== undefined) {
+    parts.push(t('sync-received', { count: note.received }));
+  }
+  if (note.sent !== null && note.sent !== undefined) {
+    parts.push(t('sync-sent', { count: note.sent }));
+  }
+  if (note.head_rejected) {
+    parts.push(t('sync-head-rejected'));
+  } else if (note.conflicts !== null && note.conflicts !== undefined) {
+    parts.push(t('sync-conflicts', { count: note.conflicts }));
+  }
+  return parts.join(' · ');
+}
+
 function renderStatus(status) {
-  const items = `${status.item_count} item${status.item_count === 1 ? '' : 's'}`;
+  lastStatus = status;
+  drawStatus();
+}
+
+function drawStatus() {
+  const status = lastStatus;
+  if (!status) {
+    return;
+  }
+
+  const items = t('status-items', { count: status.item_count });
   if (!status.unlocked) {
-    statusLine.textContent = status.has_account ? 'locked' : 'no vault on this machine';
+    statusLine.textContent = status.has_account ? t('status-locked') : t('status-no-vault');
   } else if (status.pending_count > 0) {
-    statusLine.textContent = `unlocked · ${items} · ${status.pending_count} to send`;
+    statusLine.textContent = t('status-unlocked-pending', {
+      items,
+      pending: t('status-pending', { count: status.pending_count }),
+    });
   } else {
-    statusLine.textContent = `unlocked · ${items}`;
+    statusLine.textContent = t('status-unlocked', { items });
   }
 
   // What synchronization last did, and whether the server is reachable at all. The
   // vault works without it, so an unreachable server is a note rather than an error.
   const notes = [];
   if (status.last_sync) {
-    notes.push(status.last_sync);
+    notes.push(describeSync(status.last_sync));
   }
   if (status.unlocked && !status.connected) {
-    notes.push(`not connected to ${status.server_url}`);
+    notes.push(t('sync-not-connected', { url: status.server_url }));
   }
   syncNote.textContent = notes.join(' · ');
   syncNote.hidden = notes.length === 0;
@@ -100,7 +242,8 @@ function renderStatus(status) {
   // Where the application is pointed and where it keeps its data, in every state of the
   // account: with several installations on one desk, this line is how a person tells which
   // server and which directory they are looking at, and before an account exists it is the
-  // only place those two facts can be read at all.
+  // only place those two facts can be read at all. None of it is wording — an identifier, an
+  // address, a directory and the KDF parameters read the same in every language.
   const location = [];
   if (status.identifier) {
     location.push(status.identifier);
@@ -113,14 +256,21 @@ function renderStatus(status) {
   footer.textContent = location.join(' · ');
 }
 
-/** Draws the item list. Titles are user data, so they are set as text. */
 function renderItems(items) {
-  itemList.replaceChildren();
-  emptyHint.hidden = items.length > 0;
+  lastItems = items;
+  drawItems();
+}
 
-  for (const item of items) {
+/** Draws the item list. Titles are user data, so they are set as text. */
+function drawItems() {
+  itemList.replaceChildren();
+  emptyHint.hidden = lastItems.length > 0;
+
+  for (const item of lastItems) {
     const row = document.createElement('li');
     row.className = 'item';
+    row.setAttribute('data-testid', 'item-row');
+    row.setAttribute('data-item-id', item.id);
 
     const button = document.createElement('button');
     button.type = 'button';
@@ -129,14 +279,14 @@ function renderItems(items) {
 
     const title = document.createElement('span');
     title.className = 'item-title';
-    title.textContent = item.title || '(untitled)';
+    title.textContent = item.title || t('vault-untitled');
     button.append(title);
 
     const subtitle = document.createElement('span');
     subtitle.className = 'item-subtitle';
     const parts = [item.username, item.url].filter(Boolean);
     if (item.pending) {
-      parts.push('not sent yet');
+      parts.push(t('vault-pending'));
     }
     subtitle.textContent = parts.join(' · ');
     button.append(subtitle);
@@ -172,11 +322,14 @@ async function refresh() {
  * The document is put in a `<pre>` as text, never as markup, and the screen stays up
  * until the user says they saved it. Nothing here writes the key anywhere, so a
  * dismissed panel is a key that no longer exists.
+ *
+ * The heading is chosen by key rather than by text: an issued kit is a different heading from
+ * a kit that was there all along, and which one it is has to survive a language switch.
  */
-function showKit(document_, { title } = {}) {
-  byId('kit-title').textContent = title || 'Your Emergency Kit';
+function showKit(document_, { titleKey = 'kit-title' } = {}) {
+  say(byId('kit-title'), titleKey);
   byId('kit-text').textContent = document_;
-  byId('kit-copy').textContent = 'Copy';
+  say(byId('kit-copy'), 'kit-copy');
   showPanel('kit');
 }
 
@@ -195,11 +348,11 @@ async function openEditor(id) {
     byId('editor-password').value = item.password;
     byId('editor-url').value = item.url;
     byId('editor-notes').value = item.notes;
-    byId('editor-title').textContent = 'Edit an item';
+    say(byId('editor-title'), 'editor-title-edit');
     byId('editor-delete').hidden = false;
   } else {
     byId('editor-id').value = '';
-    byId('editor-title').textContent = 'Add an item';
+    say(byId('editor-title'), 'editor-title-new');
     byId('editor-delete').hidden = true;
   }
 
@@ -229,17 +382,19 @@ async function withBusy(button, work) {
 
 // --- wiring -----------------------------------------------------------------
 
+byId('language-select').addEventListener('change', (event) => setLocale(event.target.value));
+
 byId('create-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   clearComplaint();
 
   const password = byId('create-password').value;
   if (password !== byId('create-confirm').value) {
-    complain('The two passwords do not match.');
+    complain(t('err-passwords-mismatch'));
     return;
   }
   if (password.length < 12) {
-    complain('Use at least 12 characters. This password is the only thing protecting the vault.');
+    complain(t('err-password-short'));
     return;
   }
 
@@ -253,7 +408,7 @@ byId('create-form').addEventListener('submit', async (event) => {
     await refresh();
     // The kit is shown only after the vault screen exists behind it, so dismissing the
     // panel lands somewhere sensible.
-    showKit(created.emergency_kit, { title: 'Your Emergency Kit' });
+    showKit(created.emergency_kit);
   } catch (error) {
     complain(describe(error));
   } finally {
@@ -289,11 +444,11 @@ byId('join-form').addEventListener('submit', async (event) => {
 
   const password = byId('join-password').value;
   if (!byId('join-identifier').value.trim()) {
-    complain('Type the account name you registered with.');
+    complain(t('err-account-name-required'));
     return;
   }
   if (!password) {
-    complain('Type the master password for that account.');
+    complain(t('err-master-password-required'));
     return;
   }
 
@@ -331,15 +486,15 @@ byId('recover-form').addEventListener('submit', async (event) => {
 
   const password = byId('recover-password').value;
   if (password !== byId('recover-confirm').value) {
-    complain('The two passwords do not match.');
+    complain(t('err-passwords-mismatch'));
     return;
   }
   if (password.length < 12) {
-    complain('Use at least 12 characters. This password is the only thing protecting the vault.');
+    complain(t('err-password-short'));
     return;
   }
   if (!byId('recover-key').value.trim()) {
-    complain('Type the recovery key from the Emergency Kit.');
+    complain(t('err-recovery-key-required'));
     return;
   }
 
@@ -353,7 +508,7 @@ byId('recover-form').addEventListener('submit', async (event) => {
     await refresh();
     // A new kit was issued and the old one is now scrap, so this document is the only
     // working copy in existence.
-    showKit(created.emergency_kit, { title: 'Your new Emergency Kit' });
+    showKit(created.emergency_kit, { titleKey: 'kit-new-title' });
   } catch (error) {
     complain(describe(error));
   } finally {
@@ -364,11 +519,11 @@ byId('recover-form').addEventListener('submit', async (event) => {
 byId('kit-copy').addEventListener('click', async () => {
   try {
     await navigator.clipboard.writeText(byId('kit-text').textContent);
-    byId('kit-copy').textContent = 'Copied';
+    say(byId('kit-copy'), 'kit-copied');
   } catch {
     // A clipboard the platform refuses is not a reason to lose the key: the text is
     // selectable on screen, and the button says so.
-    byId('kit-copy').textContent = 'Select the text and copy it';
+    say(byId('kit-copy'), 'kit-copy-manual');
   }
 });
 
@@ -397,11 +552,11 @@ byId('password-form').addEventListener('submit', async (event) => {
 
   const next = byId('password-new').value;
   if (next !== byId('password-confirm').value) {
-    complain('The two new passwords do not match.');
+    complain(t('err-passwords-mismatch-new'));
     return;
   }
   if (next.length < 12) {
-    complain('Use at least 12 characters. This password is the only thing protecting the vault.');
+    complain(t('err-password-short'));
     return;
   }
 
@@ -424,11 +579,9 @@ byId('new-kit-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   clearComplaint();
 
-  if (
-    !window.confirm(
-      'Issue a new Emergency Kit? The old recovery key stops working immediately.',
-    )
-  ) {
+  // Read at the moment of the call, not when the page loaded: a dialog that asks in the
+  // language the reader has just left is a dialog that has to be answered twice.
+  if (!window.confirm(t('security-kit-confirm'))) {
     return;
   }
 
@@ -441,7 +594,7 @@ byId('new-kit-form').addEventListener('submit', async (event) => {
     // The password field is cleared before the kit is shown, so a screenshot of the
     // kit cannot also contain the master password.
     wipeSecretFields();
-    showKit(issued.emergency_kit, { title: 'Your new Emergency Kit' });
+    showKit(issued.emergency_kit, { titleKey: 'kit-new-title' });
   } catch (error) {
     complain(describe(error));
     wipeSecretFields();
@@ -515,7 +668,7 @@ byId('editor-delete').addEventListener('click', async () => {
     return;
   }
   // Deleting is a tombstone, not a wipe, but the user should still mean it.
-  if (!window.confirm('Delete this item? It will be removed from the list.')) {
+  if (!window.confirm(t('editor-delete-confirm'))) {
     return;
   }
 
@@ -529,5 +682,10 @@ byId('editor-delete').addEventListener('click', async () => {
     wipeSecretFields();
   }
 });
+
+// Before the first panel is up: the stored language is put on the page, so a reader who chose
+// English does not get a screen of Russian first. The markup is the Russian default, which is
+// also the fallback for a stored value that is neither language.
+applyLocale(storedLocale());
 
 refresh().catch((error) => complain(describe(error)));
