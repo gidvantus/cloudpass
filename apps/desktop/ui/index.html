@@ -335,6 +335,25 @@
         <p class="hint" id="empty-hint" hidden data-i18n="vault-empty">
           Записей пока нет. Нажмите «Добавить».
         </p>
+
+        <!-- One row of the list, as markup the script clones. A `<template>` renders nothing,
+             which is the point: a sample row on screen would be a row someone could click. -->
+        <template id="item-row-template">
+          <li class="item" data-testid="item-row">
+            <button type="button" class="item-button">
+              <span class="item-title"></span>
+              <span class="item-subtitle"></span>
+            </button>
+            <button
+              type="button"
+              class="secondary item-copy"
+              data-testid="copy-password"
+              data-i18n="vault-copy"
+            >
+              Скопировать
+            </button>
+          </li>
+        </template>
       </section>
 
       <!-- Editor ------------------------------------------------------------- -->

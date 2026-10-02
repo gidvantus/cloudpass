@@ -111,6 +111,8 @@ export default {
   'vault-empty': 'No items yet. Use “Add”.',
   'vault-untitled': '(untitled)',
   'vault-pending': 'not sent yet',
+  'vault-copy': 'Copy',
+  'vault-copied': 'Copied',
 
   'editor-title-new': 'Add an item',
   'editor-title-edit': 'Edit an item',
@@ -165,5 +167,8 @@ export default {
   'err-bad-id': 'That item identifier is not valid.',
   'err-server-fixed': 'This vault is already registered; the server cannot be changed.',
   'err-not-signed-in': 'Not signed in — lock the vault and unlock it again.',
+  'err-clipboard-insecure-origin':
+    'The application window does not offer a clipboard.',
+  'err-clipboard-denied': 'The application refused access to the clipboard.',
   'err-unknown': 'The operation failed.',
 };
