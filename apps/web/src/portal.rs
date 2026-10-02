@@ -31,30 +31,50 @@ struct ErrorDto {
     message: String,
 }
 
-fn error_code(error: &ClientError) -> &'static str {
+/// The code the page branches on.
+///
+/// It is a `String` rather than a `&'static str` because two of the codes are the browser's
+/// rather than this module's: a clipboard failure is reported by the transport as one of its
+/// own codes, and those are the page's to word like any other. See [`clipboard_code`].
+fn error_code(error: &ClientError) -> String {
     match error {
-        ClientError::Locked => "locked",
-        ClientError::NoAccount => "no_account",
-        ClientError::AccountExists => "account_exists",
-        ClientError::WrongPassword => "wrong_password",
-        ClientError::NoRecoveryKit => "no_recovery_kit",
-        ClientError::WrongRecoveryKey => "wrong_recovery_key",
-        ClientError::ItemNotFound => "item_not_found",
-        ClientError::EmptyItem => "empty_item",
-        ClientError::Crypto(_) => "crypto",
-        ClientError::Storage(_) => "storage",
-        ClientError::Corrupt(_) => "corrupt",
-        ClientError::Serialization(_) => "serialization",
-        ClientError::Transport(_) => "network",
-        ClientError::Http { .. } => "server_refused",
-        ClientError::Protocol(_) => "protocol",
+        ClientError::Locked => "locked".to_owned(),
+        ClientError::NoAccount => "no_account".to_owned(),
+        ClientError::AccountExists => "account_exists".to_owned(),
+        ClientError::WrongPassword => "wrong_password".to_owned(),
+        ClientError::NoRecoveryKit => "no_recovery_kit".to_owned(),
+        ClientError::WrongRecoveryKey => "wrong_recovery_key".to_owned(),
+        ClientError::ItemNotFound => "item_not_found".to_owned(),
+        ClientError::EmptyItem => "empty_item".to_owned(),
+        ClientError::Crypto(_) => "crypto".to_owned(),
+        ClientError::Storage(_) => "storage".to_owned(),
+        ClientError::Corrupt(_) => "corrupt".to_owned(),
+        ClientError::Serialization(_) => "serialization".to_owned(),
+        // The transport is the browser's, so this is where a clipboard failure stops being a
+        // network failure and becomes the code the page has a sentence for.
+        ClientError::Transport(detail) => clipboard_code(detail).unwrap_or("network").to_owned(),
+        ClientError::Http { .. } => "server_refused".to_owned(),
+        ClientError::Protocol(_) => "protocol".to_owned(),
     }
+}
+
+/// The clipboard codes the page can translate, as `transport.rs` reports them.
+///
+/// Matched by prefix because a code may be followed by the browser's own description of the
+/// refusal, which is worth keeping in the payload and is never rendered.
+fn clipboard_code(detail: &str) -> Option<&'static str> {
+    [
+        crate::transport::CLIPBOARD_INSECURE_ORIGIN,
+        crate::transport::CLIPBOARD_DENIED,
+    ]
+    .into_iter()
+    .find(|code| detail.starts_with(code))
 }
 
 /// Turns an error into the JSON string the page parses out of the exception.
 fn fail(error: ClientError) -> JsValue {
     let dto = ErrorDto {
-        code: error_code(&error).to_owned(),
+        code: error_code(&error),
         message: error.to_string(),
     };
     reject(&dto)
@@ -89,7 +109,7 @@ struct Session {
     store: MemoryStore,
     vault: Vault,
     remote: provision::RemoteSession,
-    last_sync: Option<String>,
+    last_sync: Option<SyncNote>,
 }
 
 thread_local! {
@@ -116,6 +136,49 @@ fn put_session(session: Session) {
 // Shapes the page consumes
 // ---------------------------------------------------------------------------
 
+/// What the last synchronization did, as a key and the numbers that go with it.
+///
+/// The module does not write the status line. It reports *which* situation happened and *how
+/// much* moved, and the page turns that into a sentence in whatever language it is showing —
+/// which is the only place a sentence may live, because the page is the only thing that knows
+/// the language.
+///
+/// `error_detail` is the one field that carries prose, and it is never rendered: it is the
+/// English wording from the crates shared with the desktop client, kept for the record, while
+/// the person sees the localized sentence for `key`.
+#[derive(Debug, Clone, Serialize)]
+struct SyncNote {
+    /// `sync-ok` for a synchronization that ran, or the key of the state that stopped one.
+    key: &'static str,
+    received: Option<usize>,
+    sent: Option<usize>,
+    conflicts: Option<usize>,
+    head_rejected: bool,
+    error_detail: Option<String>,
+}
+
+impl SyncNote {
+    /// A note that is only a key: a state with no counts to report.
+    fn of_key(key: &'static str) -> Self {
+        Self {
+            key,
+            received: None,
+            sent: None,
+            conflicts: None,
+            head_rejected: false,
+            error_detail: None,
+        }
+    }
+
+    /// A key plus why it happened. The page shows the key; the detail stays off the screen.
+    fn with_detail(key: &'static str, detail: &ClientError) -> Self {
+        Self {
+            error_detail: Some(detail.to_string()),
+            ..Self::of_key(key)
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 struct StatusDto {
     unlocked: bool,
@@ -123,7 +186,7 @@ struct StatusDto {
     item_count: usize,
     pending_count: usize,
     server_url: Option<String>,
-    last_sync: Option<String>,
+    last_sync: Option<SyncNote>,
 }
 
 #[derive(Debug, Serialize)]
@@ -226,7 +289,7 @@ async fn create_account_inner(
             store,
             vault,
             remote,
-            last_sync: Some("account registered".to_owned()),
+            last_sync: Some(SyncNote::of_key("sync-registered")),
         },
         kit,
     ))
@@ -273,14 +336,16 @@ async fn unlock_inner(
     // Pull immediately: an empty list with a Sync button would look like a failed sign-in.
     session.last_sync = Some(match synchronize(&mut session).await {
         Ok(note) => note,
-        Err(error) => format!("вход выполнен, но первая синхронизация не удалась: {error}"),
+        // The sign-in itself worked; only the first pull did not. The reason is English prose
+        // from a shared crate and stays in `error_detail`, where nothing renders it.
+        Err(error) => SyncNote::with_detail("sync-signed-in", &error),
     });
 
     Ok(session)
 }
 
-/// One round of synchronization, and the sentence that describes it.
-async fn synchronize(session: &mut Session) -> Result<String, ClientError> {
+/// One round of synchronization, and the note that describes it.
+async fn synchronize(session: &mut Session) -> Result<SyncNote, ClientError> {
     let account = session
         .store
         .load_account()?
@@ -314,25 +379,31 @@ async fn synchronize(session: &mut Session) -> Result<String, ClientError> {
     Ok(describe(&outcome))
 }
 
-/// A one-line summary of what a synchronization did, for the status line.
+/// What a synchronization did, as a key and the numbers that describe it.
 ///
-/// The portal's own strings are in Russian, like the rest of the page. The messages that come
-/// out of `ClientError` are not, and are not translated here: those sentences come from crates
-/// shared with the desktop client, and the page maps their stable `code` instead of trying to
-/// rewrite someone else's prose.
-fn describe(outcome: &cloudpass_client::sync::SyncOutcome) -> String {
-    let mut parts = vec![format!("получено {}", outcome.pulled.absorbed)];
-    match &outcome.pushed {
-        Some(pushed) if pushed.applied > 0 => parts.push(format!("отправлено {}", pushed.applied)),
-        Some(pushed) if !pushed.conflicts.is_empty() => {
-            parts.push(format!("конфликтов: {}", pushed.conflicts.len()));
+/// The page composes the line: `sync-received`, `sync-sent`, `sync-conflicts` and
+/// `sync-head-rejected` are its words for these numbers, and in the language it is showing.
+/// The one thing this function must not do is decide a wording — it did once, and the result
+/// was a Russian phrase that no other client could ever reuse.
+fn describe(outcome: &cloudpass_client::sync::SyncOutcome) -> SyncNote {
+    let mut note = SyncNote {
+        received: Some(outcome.pulled.absorbed),
+        ..SyncNote::of_key("sync-ok")
+    };
+
+    if let Some(pushed) = &outcome.pushed {
+        if pushed.applied > 0 {
+            note.sent = Some(pushed.applied);
+        } else if pushed.head_rejected.is_some() {
+            // A refusal by the server is reported as the fact of it. The reason it gave is
+            // English prose from a shared crate, and the page shows this key instead.
+            note.head_rejected = true;
+        } else if !pushed.conflicts.is_empty() {
+            note.conflicts = Some(pushed.conflicts.len());
         }
-        Some(pushed) if pushed.head_rejected.is_some() => {
-            parts.push("сервер отказался принять изменение".to_owned());
-        }
-        _ => {}
     }
-    parts.join(" · ")
+
+    note
 }
 
 /// Tries to send what was just changed, and never fails the edit over it.
@@ -340,10 +411,10 @@ fn describe(outcome: &cloudpass_client::sync::SyncOutcome) -> String {
 /// A failed sync is not a failed edit: the change is already in the store and is marked
 /// as unsent, so the next sync carries it. Reporting that is the point; discarding the
 /// user's work because the network blinked would not be.
-async fn after_change(session: &mut Session) -> Option<String> {
+async fn after_change(session: &mut Session) -> Option<SyncNote> {
     match synchronize(session).await {
         Ok(note) => Some(note),
-        Err(error) => Some(format!("сохранено во вкладке, ещё не отправлено: {error}")),
+        Err(error) => Some(SyncNote::with_detail("sync-unavailable", &error)),
     }
 }
 

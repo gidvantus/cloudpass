@@ -35,11 +35,12 @@ const pkg = process.argv[3]
 // `web_sys::window()` looks for a global `window`; in Node the global object is it.
 globalThis.window = globalThis;
 
-// The status line is user-facing prose produced by the module, so these two assertions track
-// its wording. That is deliberate: asserting on a summary a person reads is what catches a
-// push that quietly became a no-op, and the wording is the only thing the API reports about
-// it. If the portal's language changes, this is the line that has to change with it.
-const SENT_ONE = 'отправлено 1';
+// The status line the module reports is a key plus the numbers that go with it, never a
+// sentence: the wording belongs to the portal, which is the only side that knows what language
+// it is showing. So the assertions below check the structure — which note, and how much moved —
+// and never prose. That is what makes this test independent of the language on the page, and it
+// is also what catches the defect this replaced: an English sentence that used to reach a
+// Russian interface straight out of Rust.
 
 let failures = 0;
 function check(label, condition, detail) {
@@ -90,6 +91,11 @@ const created = parse(await module.create_account(serverUrl, identifier, passwor
 check('registration returns a kit', created.emergency_kit.includes('CPRK1-'));
 check('registration leaves the portal unlocked', created.status.unlocked === true);
 check('registration reports no items', created.status.item_count === 0);
+check(
+  'registration reports a key, not a sentence',
+  created.status.last_sync?.key === 'sync-registered',
+  JSON.stringify(created.status.last_sync),
+);
 
 // 2. Save a password.
 const added = parse(
@@ -109,8 +115,8 @@ check('the item was added', typeof itemId === 'string' && itemId.length > 0);
 check('the status counts it', added.status.item_count === 1);
 check(
   'the push reached the server',
-  String(added.status.last_sync).includes(SENT_ONE),
-  added.status.last_sync,
+  added.status.last_sync?.key === 'sync-ok' && added.status.last_sync?.sent === 1,
+  JSON.stringify(added.status.last_sync),
 );
 
 // 3. The list must not carry the secret.
@@ -158,6 +164,11 @@ try {
 const reopened = parse(await module.unlock(serverUrl, identifier, password));
 check('sign-in succeeds', reopened.unlocked === true);
 check('sign-in pulls the stored item', reopened.item_count === 1, reopened.item_count);
+check(
+  'sign-in reports a key, not a sign-in sentence',
+  reopened.last_sync?.key === 'sync-ok',
+  JSON.stringify(reopened.last_sync),
+);
 const afterUnlock = parse(await module.list_items());
 check('the item survived the round trip', afterUnlock[0].title === 'GitHub (work)');
 check(
@@ -187,8 +198,8 @@ const status = parse(await module.delete_item(afterUnlock[0].id));
 check('delete empties the vault', status.item_count === 0);
 check(
   'the deletion was sent',
-  String(status.last_sync).includes(SENT_ONE),
-  status.last_sync,
+  status.last_sync?.key === 'sync-ok' && status.last_sync?.sent === 1,
+  JSON.stringify(status.last_sync),
 );
 
 console.log(failures === 0 ? '\nAll smoke checks passed.' : `\n${failures} check(s) failed.`);

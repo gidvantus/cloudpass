@@ -9,6 +9,12 @@
 // Two rules throughout, because they are cheap here and expensive later: user text is written
 // with textContent and never innerHTML, and every field that held a secret is cleared as soon
 // as the call that used it returns.
+//
+// A third rule is the language. This file holds no wording of its own: every phrase comes from
+// `locales-ru.js` or `locales-en.js` through `i18n.js`, including the ones that depend on
+// state. Where a label changes with the state — «Новая запись» against «Запись», «Показать»
+// against «Скрыть» — what changes is the *key* (`data-i18n`), never the text, so switching the
+// language re-derives the label from the state instead of freezing it.
 
 import init, {
   create_account,
@@ -26,7 +32,76 @@ import init, {
   sync_now,
 } from './pkg/cloudpass_web.js';
 
+import { createI18n } from './i18n.js';
+import localesRu from './locales-ru.js';
+import localesEn from './locales-en.js';
+
 const byId = (id) => document.getElementById(id);
+
+// --- the language -----------------------------------------------------------
+
+/** Where the choice lives. The only thing this portal ever writes to `localStorage`. */
+const LANGUAGE_KEY = 'cloudpass.language';
+const DEFAULT_LOCALE = 'ru';
+
+const i18n = createI18n({ ru: localesRu, en: localesEn }, DEFAULT_LOCALE);
+const t = (key, params) => i18n.t(key, params);
+
+/** The stored language, or the default for anything that is not one of the two. */
+function storedLocale() {
+  try {
+    return window.localStorage.getItem(LANGUAGE_KEY) === 'en' ? 'en' : DEFAULT_LOCALE;
+  } catch {
+    // A browser that refuses `localStorage` — private mode, a policy — is not a broken
+    // portal: the language simply does not survive the reload.
+    return DEFAULT_LOCALE;
+  }
+}
+
+/**
+ * Writes an element's wording by key, keeping `data-i18n` in step with it.
+ *
+ * The attribute matters more than the text: it is what `applyTranslations()` reads on the
+ * next language switch, so an element whose label depends on state has to change the key
+ * when the state changes, or the switch would put the wrong label back.
+ */
+function say(element, key, params) {
+  element.dataset.i18n = key;
+  element.textContent = params ? t(key, params) : t(key);
+}
+
+/** Switches the language and remembers it, so the next load is not a fresh start. */
+function setLocale(next) {
+  const applied = applyLocale(next);
+  try {
+    window.localStorage.setItem(LANGUAGE_KEY, applied);
+  } catch {
+    // Losing the choice on reload is a smaller failure than a page that will not switch.
+  }
+}
+
+/**
+ * Puts a language on the page: the translator, the text, the document language, the pickers.
+ *
+ * The translator is switched here rather than by the caller, because this is the one function
+ * both paths go through — the picker, and a stored choice read at load. Switching it only on
+ * the first of those leaves a page whose `lang` says `en` while every word on it is Russian,
+ * which is precisely the state this change exists to make impossible.
+ *
+ * Deliberately nothing else. Re-rendering is limited to what is derived from state
+ * (`renderDynamic`), so the emergency kit on screen, the values typed into a form, the record
+ * being edited and the position in the route all survive a switch untouched.
+ */
+function applyLocale(locale) {
+  const applied = i18n.setLocale(locale);
+  document.documentElement.lang = applied;
+  for (const select of document.querySelectorAll('select[data-testid="language-select"]')) {
+    select.value = applied;
+  }
+  i18n.applyTranslations();
+  renderDynamic();
+  return applied;
+}
 
 const views = {
   landing: byId('view-landing'),
@@ -47,34 +122,6 @@ const firstField = {
 const banner = byId('banner');
 const boot = byId('boot');
 
-/**
- * Russian wording for the error codes the module reports.
- *
- * The module's own messages come from crates shared with the desktop client and are in
- * English. Rather than translate those — which would drag this language into a client that
- * has nothing to do with the portal — the code is mapped here and the English sentence is
- * kept as a fallback for anything not in the table. A code is a stable contract; a sentence
- * is not.
- */
-const MESSAGES = {
-  busy: 'Другая операция ещё выполняется. Подождите секунду.',
-  locked: 'Хранилище заблокировано. Войдите заново.',
-  no_account: 'На этом устройстве нет такого аккаунта.',
-  account_exists: 'Аккаунт уже существует.',
-  wrong_password: 'Неверное имя аккаунта или мастер-пароль.',
-  no_recovery_kit: 'У этого аккаунта нет ключа восстановления.',
-  wrong_recovery_key: 'Ключ восстановления не подходит к этому аккаунту.',
-  item_not_found: 'Запись не найдена.',
-  empty_item: 'В записи нечего сохранять — заполните хотя бы название.',
-  crypto: 'Криптографическая операция не удалась. Данные не изменены.',
-  storage: 'Ошибка локального хранилища браузера.',
-  corrupt: 'Сохранённые данные не читаются.',
-  serialization: 'Не удалось собрать данные запроса.',
-  network: 'Сервер недоступен. Проверьте, что он запущен, и попробуйте снова.',
-  server_refused: 'Сервер отказал в запросе.',
-  protocol: 'Сервер ответил чем-то, что этот клиент не понимает.',
-};
-
 let unlocked = false;
 /** A kit was just issued and has not been acknowledged. It exists only in memory. */
 let kitPending = false;
@@ -92,16 +139,55 @@ let projects = [];
  */
 let selectedProject = null;
 
+/** The last synchronization note the module reported, as a key plus numbers. */
+let lastSync = null;
+/** Whether the editor holds an existing record or a new one. */
+let editingItem = false;
+/** What the server offers as a desktop build, if anything. */
+let desktopBuild = null;
+/** Why the module never started, if it did not. */
+let bootFailure = null;
+
 // --- plumbing ---------------------------------------------------------------
 
-function complain(message) {
-  banner.textContent = message;
-  banner.hidden = false;
+/** What the banner is showing, as a key to translate or as prose that has no key of its own. */
+let complaint = null;
+
+/**
+ * Raises a complaint: a locale key, or a descriptor from [`describe`].
+ *
+ * The banner holds the *key*, not the sentence, because it outlives the language it was raised
+ * in. A password mismatch reported in Russian and then switched to English has to say the same
+ * thing in English — the same problem `#item-title` solves the same way, by keeping the state
+ * in `data-i18n` and letting the tables supply the words.
+ */
+function complain(issue) {
+  complaint = typeof issue === 'string' ? { key: issue } : issue;
+  renderBanner();
 }
 
 function dismiss() {
+  complaint = null;
   banner.hidden = true;
   banner.textContent = '';
+}
+
+/** The text of a complaint: its sentence, translated, or prose that has no key. */
+function renderIssue(issue) {
+  return issue.key ? t(issue.key, issue.params) : issue.text;
+}
+
+function renderBanner() {
+  if (!complaint) {
+    return;
+  }
+  banner.textContent = renderIssue(complaint);
+  banner.hidden = false;
+}
+
+/** Turns an error code from the module into the key its sentence lives under. */
+function errorKey(code) {
+  return `err-${String(code).replaceAll('_', '-')}`;
 }
 
 /**
@@ -109,6 +195,12 @@ function dismiss() {
  *
  * The module rejects with a JSON string, because an exception is the only channel
  * wasm-bindgen gives us and a string is the only thing that survives it intact.
+ *
+ * The answer is a *descriptor*, not a sentence: the code the module carries is the contract,
+ * and the sentence is looked up by it when the banner is drawn — which happens again after
+ * every language switch. The message the module also sends is English prose from crates shared
+ * with the desktop client, so it is a fallback for a code this page has never heard of, kept as
+ * text precisely because no key could translate it.
  */
 function describe(error) {
   let parsed = null;
@@ -116,22 +208,27 @@ function describe(error) {
     try {
       parsed = JSON.parse(error);
     } catch {
-      return error;
+      return { text: error };
     }
   } else if (error && typeof error === 'object') {
     parsed = error;
   }
 
   if (parsed && typeof parsed === 'object') {
-    if (parsed.code && MESSAGES[parsed.code]) {
-      return MESSAGES[parsed.code];
+    if (parsed.code) {
+      const key = errorKey(parsed.code);
+      // `t` answers with the key itself when there is no entry, and a sentence is never
+      // equal to its key — so this tells "translated" from "unknown" without a second table.
+      if (t(key) !== key) {
+        return { key };
+      }
     }
     if (parsed.message) {
-      return parsed.message;
+      return { text: parsed.message };
     }
   }
 
-  return String(error);
+  return { key: 'err-unknown' };
 }
 
 function show(name) {
@@ -177,12 +274,14 @@ async function withBusy(button, work) {
 }
 
 /** Confirms an action on the button itself, without a dialog in the way. */
-function flash(button, label) {
-  const original = button.textContent;
-  button.textContent = label;
+function flash(button, key) {
+  // The button's own key is what it goes back to — not the text captured here, which would
+  // be in the language that was current when the click happened.
+  const original = button.dataset.i18n;
+  button.textContent = t(key);
   button.disabled = true;
   window.setTimeout(() => {
-    button.textContent = original;
+    button.textContent = original ? t(original) : '';
     button.disabled = false;
   }, 1200);
 }
@@ -196,7 +295,37 @@ async function copyText(text) {
   }
 }
 
-// --- routing ----------------------------------------------------------------
+// --- what depends on state --------------------------------------------------
+
+/**
+ * Everything whose wording is decided by state rather than by the markup.
+ *
+ * This is the whole of what a language switch redraws. It deliberately does not touch form
+ * fields, the emergency kit on screen or the route: those are the things a switch must not
+ * be able to lose.
+ */
+function renderDynamic() {
+  // The banner first: it is the one thing on the page that was written by an action rather
+  // than by the markup, and the action's language is not necessarily the reader's.
+  renderBanner();
+  renderBoot();
+  renderAuthAction();
+  renderVaultStatus();
+  renderProjects();
+  renderItems();
+  renderItemTitle();
+  renderDesktop();
+}
+
+function renderBoot() {
+  if (bootFailure === null) {
+    return;
+  }
+  // The failure is a sentence with a parameter, which `applyTranslations()` cannot build, so
+  // this element gives up its key and is rebuilt here on every switch instead.
+  delete boot.dataset.i18n;
+  boot.textContent = t('boot-failed', { error: renderIssue(bootFailure) });
+}
 
 /**
  * The header's one control: «Войти» while the vault is shut, «Выйти» once it is open.
@@ -206,8 +335,40 @@ async function copyText(text) {
  */
 function renderAuthAction() {
   const action = byId('topbar-auth');
-  action.textContent = unlocked ? 'Выйти' : 'Войти';
+  say(action, unlocked ? 'nav-sign-out' : 'nav-sign-in');
   action.dataset.action = unlocked ? 'sign-out' : 'sign-in';
+}
+
+/**
+ * The status line: numbers, not a sentence.
+ *
+ * `sync-ok` is a marker rather than a phrase — a completed synchronization is described by how
+ * much moved, and this page owns the words for the numbers. Every other key is a sentence and
+ * carries no counts. `error_detail` is never read here: it is English prose from a shared
+ * crate, and the localized key above is what a person is meant to see.
+ */
+function renderVaultStatus() {
+  if (!lastSync) {
+    byId('vault-status').textContent = '';
+    return;
+  }
+
+  const parts = [];
+  if (lastSync.key !== 'sync-ok') {
+    parts.push(t(lastSync.key));
+  }
+  if (lastSync.received !== null && lastSync.received !== undefined) {
+    parts.push(t('sync-received', { count: lastSync.received }));
+  }
+  if (lastSync.sent !== null && lastSync.sent !== undefined) {
+    parts.push(t('sync-sent', { count: lastSync.sent }));
+  }
+  if (lastSync.head_rejected) {
+    parts.push(t('sync-head-rejected'));
+  } else if (lastSync.conflicts !== null && lastSync.conflicts !== undefined) {
+    parts.push(t('sync-conflicts', { count: lastSync.conflicts }));
+  }
+  byId('vault-status').textContent = parts.join(' · ');
 }
 
 /**
@@ -225,6 +386,7 @@ async function signOut() {
   items = [];
   projects = [];
   selectedProject = null;
+  lastSync = null;
   go('#/');
 }
 
@@ -310,10 +472,10 @@ async function render() {
 async function loadVault() {
   const state = JSON.parse(await status());
   unlocked = state.unlocked;
+  lastSync = state.last_sync || null;
 
   byId('vault-who').textContent = state.identifier || '';
   byId('vault-foot-account').textContent = state.identifier || '';
-  byId('vault-status').textContent = state.last_sync || '';
 
   items = JSON.parse(await list_items());
   projects = JSON.parse(await list_projects());
@@ -325,6 +487,7 @@ async function loadVault() {
     selectedProject = null;
   }
 
+  renderVaultStatus();
   renderProjects();
   renderItems();
 }
@@ -339,7 +502,7 @@ function renderProjects() {
   const list = byId('project-list');
   list.replaceChildren();
 
-  list.append(projectRow('Все пароли', items.length, null));
+  list.append(projectRow(t('vault-all-passwords'), items.length, null));
 
   for (const name of projects) {
     list.append(projectRow(name, items.filter((item) => item.project === name).length, name));
@@ -349,7 +512,7 @@ function renderProjects() {
   // empty list is a worse answer than not offering it at all.
   const ungrouped = items.filter((item) => !item.project).length;
   if (ungrouped > 0) {
-    list.append(projectRow('Без проекта', ungrouped, ''));
+    list.append(projectRow(t('vault-no-project'), ungrouped, ''));
   }
 
   byId('project-empty').hidden = projects.length > 0;
@@ -405,18 +568,21 @@ function renderItems() {
   list.replaceChildren();
 
   const visible = items.filter(matchesSelection);
-  byId('item-empty').hidden = visible.length > 0;
-  byId('item-empty').textContent =
-    selectedProject === null
-      ? 'Записей пока нет. Начните с «Добавить».'
-      : 'В этом проекте пока пусто. Нажмите «Добавить», чтобы положить сюда запись.';
+  const empty = byId('item-empty');
+  empty.hidden = visible.length > 0;
+  say(empty, selectedProject === null ? 'vault-empty-all' : 'vault-empty-project');
 
-  byId('item-scope').textContent =
-    selectedProject === null
-      ? ''
-      : selectedProject === ''
-        ? 'без проекта'
-        : selectedProject;
+  const scope = byId('item-scope');
+  if (selectedProject === null) {
+    delete scope.dataset.i18n;
+    scope.textContent = '';
+  } else if (selectedProject === '') {
+    say(scope, 'vault-scope-no-project');
+  } else {
+    // A project name is the user's own text, so it is written as it is and not translated.
+    delete scope.dataset.i18n;
+    scope.textContent = selectedProject;
+  }
 
   for (const item of visible) {
     const row = document.createElement('li');
@@ -429,7 +595,7 @@ function renderItems() {
 
     const title = document.createElement('span');
     title.className = 'item-title';
-    title.textContent = item.title || '(без названия)';
+    title.textContent = item.title || t('vault-untitled');
     text.append(title);
 
     // Only worth a badge when the list is showing more than one project; inside a single
@@ -446,7 +612,7 @@ function renderItems() {
     sub.className = 'item-sub';
     const parts = [item.username, item.url].filter(Boolean);
     if (item.pending) {
-      parts.push('не отправлено');
+      parts.push(t('sync-pending'));
     }
     sub.textContent = parts.join(' · ');
     text.append(sub);
@@ -459,23 +625,23 @@ function renderItems() {
     // The button that matters: the password goes from the vault to the clipboard inside the
     // wasm module and never appears in this file or in the document.
     actions.append(
-      actionButton('Скопировать', 'btn-solid', 'copy-password', async (button) => {
+      actionButton('vault-copy', 'btn-solid', 'copy-password', async (button) => {
         await copy_password(item.id);
-        flash(button, 'Скопировано');
+        flash(button, 'vault-copied');
       }),
     );
 
     if (item.username) {
       actions.append(
-        actionButton('Логин', 'btn-outline', 'copy-username', async (button) => {
+        actionButton('vault-copy-username', 'btn-outline', 'copy-username', async (button) => {
           await copy_username(item.id);
-          flash(button, 'Скопировано');
+          flash(button, 'vault-copied');
         }),
       );
     }
 
     actions.append(
-      actionButton('Открыть', 'btn-outline', 'open-item', () => go(`#/item/${item.id}`)),
+      actionButton('vault-open', 'btn-outline', 'open-item', () => go(`#/item/${item.id}`)),
     );
 
     row.append(actions);
@@ -483,12 +649,12 @@ function renderItems() {
   }
 }
 
-function actionButton(label, variant, testId, onClick) {
+function actionButton(key, variant, testId, onClick) {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = `btn btn-small ${variant}`;
   button.setAttribute('data-testid', testId);
-  button.textContent = label;
+  say(button, key);
   button.addEventListener('click', async () => {
     dismiss();
     try {
@@ -502,11 +668,17 @@ function actionButton(label, variant, testId, onClick) {
 
 // --- the editor -------------------------------------------------------------
 
+function renderItemTitle() {
+  // The heading says which of the two things this screen is — a new entry or an existing
+  // one — so the key follows that state and the wording follows the key.
+  say(byId('item-title'), editingItem ? 'item-edit' : 'item-new');
+}
+
 async function loadItem(id) {
   const form = byId('item-form');
   form.reset();
   byId('item-password').type = 'password';
-  byId('item-reveal').textContent = 'Показать';
+  say(byId('item-reveal'), 'item-reveal');
 
   projects = await loadProjectNames();
 
@@ -520,17 +692,18 @@ async function loadItem(id) {
     byId('item-password').value = item.password;
     byId('item-url').value = item.url;
     byId('item-notes').value = item.notes;
-    byId('item-title').textContent = 'Запись';
+    editingItem = true;
     byId('item-delete').hidden = false;
   } else {
     byId('item-id').value = '';
     // A new entry lands in whatever project the cabinet was showing. That is the whole point
     // of picking one before pressing «Добавить» — otherwise the choice would be decoration.
     byId('item-project').value = selectedProject || '';
-    byId('item-title').textContent = 'Новая запись';
+    editingItem = false;
     byId('item-delete').hidden = true;
   }
 
+  renderItemTitle();
   renderProjectOptions();
 }
 
@@ -574,6 +747,12 @@ function currentDraft() {
 
 // --- event wiring -----------------------------------------------------------
 
+// Every picker on every screen, so a language chosen in the header of one screen is the
+// language of all of them.
+for (const select of document.querySelectorAll('select[data-testid="language-select"]')) {
+  select.addEventListener('change', (event) => setLocale(event.target.value));
+}
+
 byId('register-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   dismiss();
@@ -582,15 +761,15 @@ byId('register-form').addEventListener('submit', async (event) => {
   const identifier = byId('register-identifier').value.trim();
 
   if (!identifier) {
-    complain('Введите имя аккаунта.');
+    complain('register-error-identifier');
     return;
   }
   if (password !== byId('register-confirm').value) {
-    complain('Пароли не совпадают.');
+    complain('register-error-mismatch');
     return;
   }
   if (password.length < 12) {
-    complain('Минимум 12 символов: этот пароль — единственное, что защищает хранилище.');
+    complain('register-error-short');
     return;
   }
 
@@ -603,7 +782,7 @@ byId('register-form').addEventListener('submit', async (event) => {
     unlocked = true;
     kitPending = true;
     byId('kit-text').textContent = created.emergency_kit;
-    byId('kit-copy').textContent = 'Скопировать';
+    say(byId('kit-copy'), 'kit-copy');
     go('#/kit');
   } catch (error) {
     complain(describe(error));
@@ -620,7 +799,7 @@ byId('login-form').addEventListener('submit', async (event) => {
   const password = byId('login-password').value;
 
   if (!identifier || !password) {
-    complain('Введите имя аккаунта и мастер-пароль.');
+    complain('login-error-missing');
     return;
   }
 
@@ -639,7 +818,7 @@ byId('login-form').addEventListener('submit', async (event) => {
 
 byId('kit-copy').addEventListener('click', async () => {
   const copied = await copyText(byId('kit-text').textContent);
-  byId('kit-copy').textContent = copied ? 'Скопировано' : 'Выделите текст и скопируйте';
+  say(byId('kit-copy'), copied ? 'kit-copied' : 'kit-copy-manual');
 });
 
 byId('kit-done').addEventListener('click', () => {
@@ -675,7 +854,7 @@ byId('item-reveal').addEventListener('click', () => {
   const field = byId('item-password');
   const revealing = field.type === 'password';
   field.type = revealing ? 'text' : 'password';
-  byId('item-reveal').textContent = revealing ? 'Скрыть' : 'Показать';
+  say(byId('item-reveal'), revealing ? 'item-hide' : 'item-reveal');
 });
 
 byId('item-form').addEventListener('submit', async (event) => {
@@ -705,7 +884,7 @@ byId('item-delete').addEventListener('click', async () => {
   if (!id) {
     return;
   }
-  if (!window.confirm('Удалить запись? Она исчезнет из списка.')) {
+  if (!window.confirm(t('item-delete-confirm'))) {
     return;
   }
 
@@ -745,30 +924,42 @@ async function loadDesktopBuild() {
       return;
     }
 
-    byId('desktop-link').href = desktop.url;
-    byId('desktop-link').textContent = 'Скачать для Windows';
-    byId('desktop-meta').textContent = `${desktop.file} · ${formatBytes(desktop.size)}`;
-
-    const fingerprint = byId('desktop-hash');
-    fingerprint.textContent = `SHA-256 ${desktop.sha256}`;
-    fingerprint.hidden = false;
-
-    byId('desktop-block').hidden = false;
+    desktopBuild = desktop;
+    renderDesktop();
   } catch {
     // Nothing to do and nothing to say: a server that offers no desktop build is a normal
     // server, and an empty section is a better answer than an error nobody can act on.
   }
 }
 
+function renderDesktop() {
+  if (!desktopBuild) {
+    return;
+  }
+
+  // The label on the link is a translation key and is set by `applyTranslations()`; only the
+  // target is filled in here.
+  byId('desktop-link').href = desktopBuild.url;
+  byId('desktop-meta').textContent = `${desktopBuild.file} · ${formatBytes(desktopBuild.size)}`;
+  byId('desktop-hash').textContent = `SHA-256 ${desktopBuild.sha256}`;
+  byId('desktop-hash').hidden = false;
+  byId('desktop-block').hidden = false;
+}
+
 function formatBytes(bytes) {
   const mebibytes = bytes / (1024 * 1024);
   if (mebibytes >= 1) {
-    return `${mebibytes.toFixed(1)} МБ`;
+    return t('size-megabytes', { value: mebibytes.toFixed(1) });
   }
-  return `${Math.max(1, Math.round(bytes / 1024))} КБ`;
+  return t('size-kilobytes', { value: Math.max(1, Math.round(bytes / 1024)) });
 }
 
 // --- start ------------------------------------------------------------------
+
+// Before anything is shown: the stored language is put on the page, so a reader who chose
+// English does not get a screen of Russian first. The markup is the Russian default, which is
+// also the fallback for a stored value that is neither language.
+applyLocale(storedLocale());
 
 init()
   .then(async () => {
@@ -779,6 +970,7 @@ init()
     // status is only needed to seed the guard, not to restore a session.
     const state = JSON.parse(await status());
     unlocked = state.unlocked;
+    lastSync = state.last_sync || null;
 
     await render();
 
@@ -787,5 +979,6 @@ init()
     loadDesktopBuild();
   })
   .catch((error) => {
-    boot.textContent = `CloudPass не запустился: ${describe(error)}`;
+    bootFailure = describe(error);
+    renderBoot();
   });

@@ -156,9 +156,38 @@ const visible = (id) => `(() => {
   return style.display !== 'none' && style.visibility !== 'hidden' && el.getClientRects().length > 0;
 })()`;
 
+/** The language picker of the screen that is up: there is one per top bar, one of them visible. */
+const visiblePicker = `[...document.querySelectorAll('select[data-testid="language-select"]')]
+  .find((select) => select.getClientRects().length > 0)`;
+
+/** Chooses a language, the way the menu would. */
+async function chooseLanguage(locale) {
+  const chosen = await evaluate(`(() => {
+    const select = ${visiblePicker};
+    if (!select) return false;
+    select.value = ${JSON.stringify(locale)};
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`);
+  if (!chosen) {
+    throw new Error('no language picker on screen');
+  }
+  await sleep(250);
+}
+
 await cdp.send('Page.navigate', { url: `${origin}/` }, sessionId);
 await waitFor('the module to start', `document.getElementById('boot').hidden === true`);
 console.log('ok    the portal started in a real browser');
+
+// Start from a known state, before anything is checked. The language choice is remembered in
+// `localStorage`, so a leftover `en` from an earlier run against the same origin — this script's
+// own previous run, or any other check pointed at the same stand — would make "the portal starts
+// in Russian" fail for a reason that has nothing to do with the code. The query string is what
+// forces a real reload: navigating to the same URL with a different fragment alone is a
+// same-document navigation, and the module would not run again to read the cleared storage.
+await evaluate(`localStorage.clear()`);
+await cdp.send('Page.navigate', { url: `${origin}/?fresh=${Date.now()}` }, sessionId);
+await waitFor('the module to start again', `document.getElementById('boot').hidden === true`);
 
 // 1. The thing that was broken: `hidden` has to actually hide.
 {
@@ -177,7 +206,62 @@ console.log('ok    the portal started in a real browser');
   check('and it is the landing', displayed?.[0] === 'view-landing');
 }
 
-// 2. Separate screens for registration and sign-in.
+// 2. The language picker: Russian by default, English on request, and remembered.
+{
+  check('the landing offers a language picker', await evaluate(`!!(${visiblePicker})`));
+
+  const before = await evaluate(`(() => ({
+    lang: document.documentElement.lang,
+    title: document.querySelector('#view-landing h1').textContent,
+    signIn: document.getElementById('topbar-auth').textContent.trim(),
+  }))()`);
+  check('the portal starts in Russian', before.lang === 'ru', before.lang);
+
+  await chooseLanguage('en');
+
+  const after = await evaluate(`(() => ({
+    lang: document.documentElement.lang,
+    title: document.querySelector('#view-landing h1').textContent,
+    signIn: document.getElementById('topbar-auth').textContent.trim(),
+  }))()`);
+  check('the document language follows the choice', after.lang === 'en', after.lang);
+  check('the landing heading is translated', after.title !== before.title, after.title);
+  check('the header control is translated', after.signIn !== before.signIn, after.signIn);
+
+  // Nothing may be left in the other language, anywhere in the document. Two kinds of text
+  // are excluded and both are deliberate: the `option` labels, because a language picker has
+  // to be able to name the language it is offering, and the Emergency Kit document, which is
+  // generated once and is not interface text at all.
+  const cyrillic = await evaluate(`(() => {
+    const clone = document.body.cloneNode(true);
+    for (const ignored of clone.querySelectorAll('option, #kit-text')) ignored.remove();
+    return (clone.textContent.match(/[\\u0400-\\u04FF]/g) || []).length;
+  })()`);
+  check('no Russian text is left on an English page', cyrillic === 0, `${cyrillic} character(s)`);
+
+  await cdp.send('Page.navigate', { url: `${origin}/` }, sessionId);
+  await sleep(300);
+  await waitFor('the module to start again', `document.getElementById('boot').hidden === true`);
+  const reloaded = await evaluate(`(() => ({
+    lang: document.documentElement.lang,
+    title: document.querySelector('#view-landing h1').textContent,
+  }))()`);
+  check('the choice survives a reload', reloaded.lang === 'en', reloaded.lang);
+  check('and the page is still English', reloaded.title === after.title, reloaded.title);
+
+  await chooseLanguage('ru');
+  const restored = await evaluate(`(() => ({
+    lang: document.documentElement.lang,
+    title: document.querySelector('#view-landing h1').textContent,
+  }))()`);
+  check(
+    'switching back restores Russian',
+    restored.lang === 'ru' && restored.title === before.title,
+    JSON.stringify(restored),
+  );
+}
+
+// 3. Separate screens for registration and sign-in.
 await evaluate(`location.hash = '#/register'`);
 await waitFor('the registration screen', visible('view-register'));
 check('the registration screen shows', await evaluate(visible('view-register')));
@@ -189,7 +273,7 @@ await waitFor('the sign-in screen', visible('view-login'));
 check('the sign-in screen shows', await evaluate(visible('view-login')));
 check('and registration is gone', !(await evaluate(visible('view-register'))));
 
-// 3. Registration, as a person would do it.
+// 4. Registration, as a person would do it.
 const identifier = `browser-${Date.now()}@example.com`;
 const password = 'a thoroughly unremarkable master password';
 
@@ -219,6 +303,8 @@ check(
   'the kit screen is the only one shown',
   (await evaluate(`['view-landing','view-register','view-login','view-vault'].filter((id) => getComputedStyle(document.getElementById(id)).display !== 'none').length`)) === 0,
 );
+// The one screen with no way out by construction is also the one with nothing to switch for.
+check('the kit screen offers no language picker', !(await evaluate(`!!(${visiblePicker})`)));
 
 // The kit cannot be navigated away from while it is unacknowledged.
 await evaluate(`location.hash = '#/vault'`);
@@ -229,7 +315,7 @@ await evaluate(`document.getElementById('kit-done').click()`);
 await waitFor('the vault', visible('view-vault'));
 check('acknowledging the kit opens the vault', await evaluate(visible('view-vault')));
 
-// 4. Saving a password.
+// 5. Saving a password.
 await evaluate(`document.getElementById('vault-add').click()`);
 await waitFor('the editor', visible('view-item'));
 await evaluate(`(() => {
@@ -251,7 +337,62 @@ check(
   !(await evaluate(`document.body.textContent.includes('s3cr3t-from-the-browser')`)),
 );
 
-// 5. Locking and signing back in, which is the flow that was reported broken.
+// 6. A language switch may not cost anyone their work: the screen, the route and a half-typed
+//    form all have to be there afterwards. The status line is checked here too, because it is
+//    the one piece of the page that is assembled from numbers the module reports rather than
+//    from a phrase — `received 1 · sent 1` is the shape the issue asks for, in both languages.
+{
+  const statusRu = await evaluate(`document.getElementById('vault-status').textContent`);
+  check(
+    'the status line names what moved, in Russian',
+    /получено \d/.test(statusRu) && /отправлено 1/.test(statusRu),
+    statusRu,
+  );
+
+  await evaluate(`location.hash = '#/item/new'`);
+  await waitFor('the editor', visible('view-item'));
+  await evaluate(`(() => {
+    document.getElementById('item-name').value = 'Draft kept across a switch';
+    document.getElementById('item-username').value = 'typing';
+    return true;
+  })()`);
+
+  const route = await evaluate(`location.hash`);
+  await chooseLanguage('en');
+
+  const statusEn = await evaluate(`document.getElementById('vault-status').textContent`);
+  check(
+    'and the same numbers in English',
+    /received \d/.test(statusEn) && /sent 1/.test(statusEn),
+    statusEn,
+  );
+
+  const kept = await evaluate(`(() => ({
+    screen: !!document.getElementById('view-item').getClientRects().length,
+    route: location.hash,
+    name: document.getElementById('item-name').value,
+    username: document.getElementById('item-username').value,
+  }))()`);
+  check('the route survives a language switch', kept.route === route, `${kept.route} vs ${route}`);
+  check('the screen survives a language switch', kept.screen);
+  check(
+    'a half-typed form survives a language switch',
+    kept.name === 'Draft kept across a switch' && kept.username === 'typing',
+    JSON.stringify(kept),
+  );
+
+  await chooseLanguage('ru');
+  // Leaving the editor without saving: the draft was never meant to be kept, only to survive
+  // the switch, and the saved entry from the step above has to still be the only one.
+  await evaluate(`location.hash = '#/vault'`);
+  await waitFor('the vault after discarding the draft', visible('view-vault'));
+  check(
+    'the discarded draft was not saved',
+    (await evaluate(`document.getElementById('item-list').children.length`)) === 1,
+  );
+}
+
+// 7. Locking and signing back in, which is the flow that was reported broken.
 await evaluate(`document.getElementById('vault-lock').click()`);
 await waitFor('the landing after locking', visible('view-landing'));
 check('locking returns to the landing', true);
@@ -277,7 +418,7 @@ try {
   check('signing in reaches the vault with the stored entry', false, banner || error.message);
 }
 
-// 6. A wrong password has to say so, on the page.
+// 8. A wrong password has to say so, on the page.
 await evaluate(`document.getElementById('vault-lock').click()`);
 await waitFor('the landing', visible('view-landing'));
 await evaluate(`location.hash = '#/login'`);
@@ -298,7 +439,44 @@ check(
   complaint,
 );
 
-// 7. The desktop build, if this server has one to offer.
+// The banner is the one piece of text on the page that an *action* wrote rather than the
+// markup, and it is the piece a language switch is most likely to leave behind: unlike a
+// static label it has no `data-i18n` for `applyTranslations()` to find, and unlike
+// `#vault-status` it is not redrawn from state unless something redraws it on purpose. So the
+// sweep for Russian text is run again here, with an error on screen — on the fresh landing it
+// cannot catch this, because on a fresh landing there is no banner.
+{
+  const bannerRu = await evaluate(`document.getElementById('banner').textContent`);
+  await chooseLanguage('en');
+
+  const bannerEn = await evaluate(`document.getElementById('banner').textContent`);
+  check(
+    'an error raised in Russian is translated with the page',
+    bannerEn.length > 0 && !/[\u0400-\u04FF]/.test(bannerEn),
+    `${bannerRu} -> ${bannerEn}`,
+  );
+
+  const cyrillicWithBanner = await evaluate(`(() => {
+    const clone = document.body.cloneNode(true);
+    for (const ignored of clone.querySelectorAll('option, #kit-text')) ignored.remove();
+    return (clone.textContent.match(/[\\u0400-\\u04FF]/g) || []).length;
+  })()`);
+  check(
+    'no Russian text is left while an error is on screen',
+    cyrillicWithBanner === 0,
+    `${cyrillicWithBanner} character(s)`,
+  );
+
+  await chooseLanguage('ru');
+  const bannerBack = await evaluate(`document.getElementById('banner').textContent`);
+  check(
+    'and switching back says the same thing in Russian',
+    bannerBack.length > 0 && /[\u0400-\u04FF]/.test(bannerBack),
+    bannerBack,
+  );
+}
+
+// 9. The desktop build, if this server has one to offer.
 //
 // The expectation is read from the server rather than hard-coded, so this is correct both for a
 // server with a build and for one without. When there is a build, the file is downloaded and
@@ -379,7 +557,7 @@ check(
   }
 }
 
-// 8. Nothing threw along the way.
+// 10. Nothing threw along the way.
 check(
   'no uncaught errors in the page',
   pageErrors.length === 0,
