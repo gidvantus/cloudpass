@@ -87,6 +87,9 @@ function applyLocale(locale) {
 
 /** Everything whose wording is decided by state rather than by the markup. */
 function renderDynamic() {
+  // The banner first: it is the one thing on the screen that was written by an action rather
+  // than by the markup, and the action's language is not necessarily the reader's.
+  renderBanner();
   drawStatus();
   drawItems();
 }
@@ -114,37 +117,61 @@ let lastStatus = null;
 /** The last list the vault reported, for the same reason. */
 let lastItems = [];
 
-/** Shows a message above the panels. */
-function complain(message) {
-  banner.textContent = message;
-  banner.hidden = false;
+/** What the banner is showing, as a key to translate. */
+let complaint = null;
+
+/**
+ * Raises a complaint: a locale key, or a descriptor from [`describe`].
+ *
+ * The banner holds the *key*, not the sentence, because it outlives the language it was raised
+ * in. A validation error reported in Russian and then switched to English has to say the same
+ * thing in English — the same problem `#editor-title` solves the same way, by keeping the state
+ * in `data-i18n` and letting the tables supply the words.
+ */
+function complain(issue) {
+  complaint = typeof issue === 'string' ? { key: issue } : issue;
+  renderBanner();
 }
 
 function clearComplaint() {
+  complaint = null;
   banner.hidden = true;
   banner.textContent = '';
 }
 
+/** The text of a complaint: its sentence, translated. */
+function renderIssue(issue) {
+  return t(issue.key, issue.params);
+}
+
+function renderBanner() {
+  if (!complaint) {
+    return;
+  }
+  banner.textContent = renderIssue(complaint);
+  banner.hidden = false;
+}
+
 /**
- * Turns a rejected command into something worth reading.
+ * Turns a rejected command into something worth showing.
  *
- * A command rejects with `{ key, detail }`. The key is the contract and the sentence is looked
- * up by it; `detail` is English prose from the crates shared with the portal and is read by
- * nobody — not the log, and certainly not the screen. A key this client has never heard of
- * falls back to a generic sentence rather than to that prose.
+ * A command rejects with `{ key, detail }`. The key is the contract, and the sentence is looked
+ * up by it when the banner is drawn — which happens again after every language switch. `detail`
+ * is English prose from the crates shared with the portal and is read by nobody — not the log,
+ * and certainly not the screen. A key this client has never heard of falls back to a generic
+ * sentence rather than to that prose.
  */
 function describe(error) {
   const key = error && typeof error === 'object' ? error.key : null;
   if (key) {
     const lookup = `err-${String(key).replaceAll('_', '-')}`;
-    const phrase = t(lookup);
     // `t` answers with the key itself when there is no entry, and a sentence is never equal
     // to its key — so this tells "translated" from "unknown" without a second table.
-    if (phrase !== lookup) {
-      return phrase;
+    if (t(lookup) !== lookup) {
+      return { key: lookup };
     }
   }
-  return t('err-unknown');
+  return { key: 'err-unknown' };
 }
 
 function showPanel(name) {
@@ -390,11 +417,11 @@ byId('create-form').addEventListener('submit', async (event) => {
 
   const password = byId('create-password').value;
   if (password !== byId('create-confirm').value) {
-    complain(t('err-passwords-mismatch'));
+    complain('err-passwords-mismatch');
     return;
   }
   if (password.length < 12) {
-    complain(t('err-password-short'));
+    complain('err-password-short');
     return;
   }
 
@@ -444,11 +471,11 @@ byId('join-form').addEventListener('submit', async (event) => {
 
   const password = byId('join-password').value;
   if (!byId('join-identifier').value.trim()) {
-    complain(t('err-account-name-required'));
+    complain('err-account-name-required');
     return;
   }
   if (!password) {
-    complain(t('err-master-password-required'));
+    complain('err-master-password-required');
     return;
   }
 
@@ -486,15 +513,15 @@ byId('recover-form').addEventListener('submit', async (event) => {
 
   const password = byId('recover-password').value;
   if (password !== byId('recover-confirm').value) {
-    complain(t('err-passwords-mismatch'));
+    complain('err-passwords-mismatch');
     return;
   }
   if (password.length < 12) {
-    complain(t('err-password-short'));
+    complain('err-password-short');
     return;
   }
   if (!byId('recover-key').value.trim()) {
-    complain(t('err-recovery-key-required'));
+    complain('err-recovery-key-required');
     return;
   }
 
@@ -552,11 +579,11 @@ byId('password-form').addEventListener('submit', async (event) => {
 
   const next = byId('password-new').value;
   if (next !== byId('password-confirm').value) {
-    complain(t('err-passwords-mismatch-new'));
+    complain('err-passwords-mismatch-new');
     return;
   }
   if (next.length < 12) {
-    complain(t('err-password-short'));
+    complain('err-password-short');
     return;
   }
 

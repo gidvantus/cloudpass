@@ -150,14 +150,39 @@ let bootFailure = null;
 
 // --- plumbing ---------------------------------------------------------------
 
-function complain(message) {
-  banner.textContent = message;
-  banner.hidden = false;
+/** What the banner is showing, as a key to translate or as prose that has no key of its own. */
+let complaint = null;
+
+/**
+ * Raises a complaint: a locale key, or a descriptor from [`describe`].
+ *
+ * The banner holds the *key*, not the sentence, because it outlives the language it was raised
+ * in. A password mismatch reported in Russian and then switched to English has to say the same
+ * thing in English — the same problem `#item-title` solves the same way, by keeping the state
+ * in `data-i18n` and letting the tables supply the words.
+ */
+function complain(issue) {
+  complaint = typeof issue === 'string' ? { key: issue } : issue;
+  renderBanner();
 }
 
 function dismiss() {
+  complaint = null;
   banner.hidden = true;
   banner.textContent = '';
+}
+
+/** The text of a complaint: its sentence, translated, or prose that has no key. */
+function renderIssue(issue) {
+  return issue.key ? t(issue.key, issue.params) : issue.text;
+}
+
+function renderBanner() {
+  if (!complaint) {
+    return;
+  }
+  banner.textContent = renderIssue(complaint);
+  banner.hidden = false;
 }
 
 /** Turns an error code from the module into the key its sentence lives under. */
@@ -171,9 +196,11 @@ function errorKey(code) {
  * The module rejects with a JSON string, because an exception is the only channel
  * wasm-bindgen gives us and a string is the only thing that survives it intact.
  *
- * The code it carries is the contract and the sentence is looked up by it. The message the
- * module also sends is English prose from crates shared with the desktop client, so it is a
- * fallback for a code this page has never heard of — never the thing shown by default.
+ * The answer is a *descriptor*, not a sentence: the code the module carries is the contract,
+ * and the sentence is looked up by it when the banner is drawn — which happens again after
+ * every language switch. The message the module also sends is English prose from crates shared
+ * with the desktop client, so it is a fallback for a code this page has never heard of, kept as
+ * text precisely because no key could translate it.
  */
 function describe(error) {
   let parsed = null;
@@ -181,7 +208,7 @@ function describe(error) {
     try {
       parsed = JSON.parse(error);
     } catch {
-      return error;
+      return { text: error };
     }
   } else if (error && typeof error === 'object') {
     parsed = error;
@@ -190,19 +217,18 @@ function describe(error) {
   if (parsed && typeof parsed === 'object') {
     if (parsed.code) {
       const key = errorKey(parsed.code);
-      const phrase = t(key);
       // `t` answers with the key itself when there is no entry, and a sentence is never
       // equal to its key — so this tells "translated" from "unknown" without a second table.
-      if (phrase !== key) {
-        return phrase;
+      if (t(key) !== key) {
+        return { key };
       }
     }
     if (parsed.message) {
-      return parsed.message;
+      return { text: parsed.message };
     }
   }
 
-  return t('err-unknown');
+  return { key: 'err-unknown' };
 }
 
 function show(name) {
@@ -279,6 +305,9 @@ async function copyText(text) {
  * be able to lose.
  */
 function renderDynamic() {
+  // The banner first: it is the one thing on the page that was written by an action rather
+  // than by the markup, and the action's language is not necessarily the reader's.
+  renderBanner();
   renderBoot();
   renderAuthAction();
   renderVaultStatus();
@@ -295,7 +324,7 @@ function renderBoot() {
   // The failure is a sentence with a parameter, which `applyTranslations()` cannot build, so
   // this element gives up its key and is rebuilt here on every switch instead.
   delete boot.dataset.i18n;
-  boot.textContent = t('boot-failed', { error: bootFailure });
+  boot.textContent = t('boot-failed', { error: renderIssue(bootFailure) });
 }
 
 /**
@@ -732,15 +761,15 @@ byId('register-form').addEventListener('submit', async (event) => {
   const identifier = byId('register-identifier').value.trim();
 
   if (!identifier) {
-    complain(t('register-error-identifier'));
+    complain('register-error-identifier');
     return;
   }
   if (password !== byId('register-confirm').value) {
-    complain(t('register-error-mismatch'));
+    complain('register-error-mismatch');
     return;
   }
   if (password.length < 12) {
-    complain(t('register-error-short'));
+    complain('register-error-short');
     return;
   }
 
@@ -770,7 +799,7 @@ byId('login-form').addEventListener('submit', async (event) => {
   const password = byId('login-password').value;
 
   if (!identifier || !password) {
-    complain(t('login-error-missing'));
+    complain('login-error-missing');
     return;
   }
 

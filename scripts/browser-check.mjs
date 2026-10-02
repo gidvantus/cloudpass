@@ -179,6 +179,16 @@ await cdp.send('Page.navigate', { url: `${origin}/` }, sessionId);
 await waitFor('the module to start', `document.getElementById('boot').hidden === true`);
 console.log('ok    the portal started in a real browser');
 
+// Start from a known state, before anything is checked. The language choice is remembered in
+// `localStorage`, so a leftover `en` from an earlier run against the same origin — this script's
+// own previous run, or any other check pointed at the same stand — would make "the portal starts
+// in Russian" fail for a reason that has nothing to do with the code. The query string is what
+// forces a real reload: navigating to the same URL with a different fragment alone is a
+// same-document navigation, and the module would not run again to read the cleared storage.
+await evaluate(`localStorage.clear()`);
+await cdp.send('Page.navigate', { url: `${origin}/?fresh=${Date.now()}` }, sessionId);
+await waitFor('the module to start again', `document.getElementById('boot').hidden === true`);
+
 // 1. The thing that was broken: `hidden` has to actually hide.
 {
   const displayed = await evaluate(`(() => {
@@ -428,6 +438,43 @@ check(
   !/ciphertext|associated data|AuthFailed/.test(complaint),
   complaint,
 );
+
+// The banner is the one piece of text on the page that an *action* wrote rather than the
+// markup, and it is the piece a language switch is most likely to leave behind: unlike a
+// static label it has no `data-i18n` for `applyTranslations()` to find, and unlike
+// `#vault-status` it is not redrawn from state unless something redraws it on purpose. So the
+// sweep for Russian text is run again here, with an error on screen — on the fresh landing it
+// cannot catch this, because on a fresh landing there is no banner.
+{
+  const bannerRu = await evaluate(`document.getElementById('banner').textContent`);
+  await chooseLanguage('en');
+
+  const bannerEn = await evaluate(`document.getElementById('banner').textContent`);
+  check(
+    'an error raised in Russian is translated with the page',
+    bannerEn.length > 0 && !/[\u0400-\u04FF]/.test(bannerEn),
+    `${bannerRu} -> ${bannerEn}`,
+  );
+
+  const cyrillicWithBanner = await evaluate(`(() => {
+    const clone = document.body.cloneNode(true);
+    for (const ignored of clone.querySelectorAll('option, #kit-text')) ignored.remove();
+    return (clone.textContent.match(/[\\u0400-\\u04FF]/g) || []).length;
+  })()`);
+  check(
+    'no Russian text is left while an error is on screen',
+    cyrillicWithBanner === 0,
+    `${cyrillicWithBanner} character(s)`,
+  );
+
+  await chooseLanguage('ru');
+  const bannerBack = await evaluate(`document.getElementById('banner').textContent`);
+  check(
+    'and switching back says the same thing in Russian',
+    bannerBack.length > 0 && /[\u0400-\u04FF]/.test(bannerBack),
+    bannerBack,
+  );
+}
 
 // 9. The desktop build, if this server has one to offer.
 //
