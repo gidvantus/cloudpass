@@ -118,7 +118,12 @@ export default {
   'item-edit': 'Запись',
   'item-name-label': 'Название',
   'item-project-label': 'Проект',
-  'item-project-placeholder': 'Без проекта',
+  'item-project-new-option': '＋ Новый проект…',
+  'item-project-new-placeholder': 'Имя нового проекта',
+  'item-project-orphan': '{name} — такого проекта больше нет среди записей',
+  'item-project-orphan-hint':
+    'В этом проекте не осталось записей, поэтому его нет в списке. Запись сохранит его имя.',
+  'item-project-error-empty': 'Введите имя нового проекта или выберите «Без проекта».',
   'item-username-label': 'Логин',
   'item-password-label': 'Пароль',
   'item-url-label': 'Адрес',

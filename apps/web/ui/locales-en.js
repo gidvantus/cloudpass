@@ -110,7 +110,12 @@ export default {
   'item-edit': 'Record',
   'item-name-label': 'Title',
   'item-project-label': 'Project',
-  'item-project-placeholder': 'No project',
+  'item-project-new-option': '＋ New project…',
+  'item-project-new-placeholder': 'Name of the new project',
+  'item-project-orphan': '{name} — no such project among the records any more',
+  'item-project-orphan-hint':
+    'This project has no records left, so it is not in the list. Saving keeps its name on this record.',
+  'item-project-error-empty': 'Enter a name for the new project, or choose “No project”.',
   'item-username-label': 'Username',
   'item-password-label': 'Password',
   'item-url-label': 'URL',

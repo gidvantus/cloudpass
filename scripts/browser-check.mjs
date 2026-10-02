@@ -392,7 +392,185 @@ check(
   );
 }
 
-// 7. Locking and signing back in, which is the flow that was reported broken.
+// 7. The project picker: a `select`, an explicit «＋ Новый проект…» beside «Без проекта», and no
+//    answer lost on the way there — neither an empty name, nor a language switch.
+{
+  await evaluate(`location.hash = '#/item/new'`);
+  await waitFor('the editor', visible('view-item'));
+
+  const picker = await evaluate(`(() => {
+    const select = document.getElementById('item-project');
+    return {
+      tag: select.tagName,
+      datalists: document.querySelectorAll('datalist').length,
+      label: select.getAttribute('aria-label') || '',
+      none: select.querySelectorAll('[data-testid="item-project-none"]').length,
+      create: select.querySelectorAll('[data-testid="item-project-new"]').length,
+      named: select.querySelectorAll('[data-testid="item-project-option"]').length,
+    };
+  })()`);
+  check('the project field is a select', picker.tag === 'SELECT', picker.tag);
+  check('and the datalist it used to carry is gone', picker.datalists === 0, `${picker.datalists} left`);
+  check('the select carries an accessible name', picker.label.trim().length > 0, picker.label);
+  check('it offers exactly one entry for «no project»', picker.none === 1, `${picker.none}`);
+  check('exactly one entry for a new project', picker.create === 1, `${picker.create}`);
+  check('and no project entry while none is in use yet', picker.named === 0, `${picker.named}`);
+
+  const revealed = await evaluate(`(() => {
+    const select = document.getElementById('item-project');
+    const create = select.querySelector('[data-testid="item-project-new"]');
+    select.value = create.value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    const field = document.getElementById('item-project-new');
+    return {
+      shown: !field.hidden && field.getClientRects().length > 0,
+      focused: document.activeElement === field,
+      service: create.value,
+    };
+  })()`);
+  check(
+    'choosing «new project» reveals the field for its name',
+    revealed.shown,
+    JSON.stringify(revealed),
+  );
+  check('and puts the caret in it', revealed.focused);
+  check('and the entry is not the empty value that means «no project»', revealed.service !== '');
+
+  // An empty name is a question, not a record: nothing is saved and the editor stays put.
+  await evaluate(`(() => {
+    document.getElementById('item-name').value = 'Kept in a project';
+    document.getElementById('item-password').value = 'a second unremarkable secret';
+    document.getElementById('item-form').requestSubmit();
+    return true;
+  })()`);
+  await waitFor(
+    'the complaint about the empty name',
+    `document.getElementById('banner').hidden === false`,
+  );
+  const refused = await evaluate(`(() => ({
+    text: document.getElementById('banner').textContent.trim(),
+    editor: !!document.getElementById('view-item').getClientRects().length,
+  }))()`);
+  check('saving a new project with no name is refused', refused.editor, JSON.stringify(refused));
+  check(
+    'and the banner says it in words rather than naming the key',
+    refused.text.length > 0 && !refused.text.includes('item-project-error-empty'),
+    refused.text,
+  );
+
+  // The name written, the same form saves and the project appears with it.
+  await evaluate(`(() => {
+    document.getElementById('item-project-new').value = 'Studio';
+    document.getElementById('item-form').requestSubmit();
+    return true;
+  })()`);
+  await waitFor('the vault after saving', visible('view-vault'));
+  await waitFor(
+    'the project to appear in the cabinet',
+    `!![...document.querySelectorAll('#project-list [data-testid="project"]')]
+      .find((row) => row.dataset.project === 'Studio')`,
+  );
+  const cabinet = await evaluate(`(() => {
+    const row = [...document.querySelectorAll('#project-list [data-testid="project"]')]
+      .find((button) => button.dataset.project === 'Studio');
+    return {
+      count: row ? row.querySelector('.project-count').textContent.trim() : null,
+      records: document.getElementById('item-list').children.length,
+      badges: [...document.querySelectorAll('[data-testid="item-project-badge"]')]
+        .map((badge) => badge.textContent),
+    };
+  })()`);
+  check(
+    'the refused submit saved nothing and the named one saved one record',
+    cabinet.records === 2,
+    JSON.stringify(cabinet),
+  );
+  check('the project is in the cabinet with its one record', cabinet.count === '1', JSON.stringify(cabinet));
+  check('and the record wears its badge', cabinet.badges.includes('Studio'), JSON.stringify(cabinet));
+
+  // Opening the record again shows the project it was saved in.
+  await evaluate(`(() => {
+    const row = [...document.querySelectorAll('#item-list [data-testid="item-row"]')]
+      .find((item) => item.textContent.includes('Kept in a project'));
+    row.querySelector('[data-testid="open-item"]').click();
+    return true;
+  })()`);
+  await waitFor(
+    'the saved record in the editor',
+    `document.getElementById('item-id').value.length > 0`,
+  );
+  const reopened = await evaluate(`(() => {
+    const select = document.getElementById('item-project');
+    return {
+      value: select.value,
+      chosen: select.selectedOptions[0] ? select.selectedOptions[0].textContent.trim() : '',
+    };
+  })()`);
+  check('reopening the record selects its project', reopened.value === 'Studio', JSON.stringify(reopened));
+  check('and the entry names it', reopened.chosen === 'Studio', reopened.chosen);
+
+  // The entries are `<option>`s and the document-wide sweep for Russian text skips them on
+  // purpose, so their wording is read here, on the element, where it can be seen.
+  await chooseLanguage('en');
+  const english = await evaluate(`(() => {
+    const select = document.getElementById('item-project');
+    return {
+      value: select.value,
+      options: [...select.options].map((option) => option.textContent.trim()),
+    };
+  })()`);
+  check(
+    'an open record keeps its project across a language switch',
+    english.value === 'Studio',
+    JSON.stringify(english),
+  );
+  check(
+    'the entry that creates a project is translated',
+    english.options.some((text) => text.includes('New project')),
+    JSON.stringify(english.options),
+  );
+  check(
+    'and no entry is left in the previous language',
+    english.options.every((text) => !/[\u0400-\u04FF]/.test(text)),
+    JSON.stringify(english.options),
+  );
+
+  // A half-typed name for a new project is the person's work: the switch may neither clear it
+  // nor move the picker back to the entry the record is filed under.
+  await evaluate(`(() => {
+    const select = document.getElementById('item-project');
+    select.value = select.querySelector('[data-testid="item-project-new"]').value;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    document.getElementById('item-project-new').value = 'Half typed';
+    return true;
+  })()`);
+  await chooseLanguage('ru');
+  const kept = await evaluate(`(() => {
+    const select = document.getElementById('item-project');
+    const field = document.getElementById('item-project-new');
+    return {
+      chosen: select.value === select.querySelector('[data-testid="item-project-new"]').value,
+      name: field.value,
+      shown: !field.hidden,
+      cyrillic: [...select.options]
+        .filter((option) => /[\\u0400-\\u04FF]/.test(option.textContent)).length,
+    };
+  })()`);
+  check('the chosen entry survives a language switch', kept.chosen, JSON.stringify(kept));
+  check('and so does a half-typed project name', kept.name === 'Half typed', JSON.stringify(kept));
+  check('and the field for it is still open', kept.shown, JSON.stringify(kept));
+  check('and the entries are back in Russian', kept.cyrillic >= 2, JSON.stringify(kept));
+
+  // Leaving the editor discards the draft, exactly as before: the cabinet keeps its two records.
+  await evaluate(`location.hash = '#/vault'`);
+  await waitFor('the vault after discarding the draft', visible('view-vault'));
+  check(
+    'the abandoned new project was not saved',
+    (await evaluate(`document.getElementById('item-list').children.length`)) === 2,
+  );
+}
+
+// 8. Locking and signing back in, which is the flow that was reported broken.
 await evaluate(`document.getElementById('vault-lock').click()`);
 await waitFor('the landing after locking', visible('view-landing'));
 check('locking returns to the landing', true);
@@ -409,7 +587,10 @@ await evaluate(`(() => {
 
 try {
   await waitFor('the vault after signing in', visible('view-vault'));
-  await waitFor('the stored item', `document.getElementById('item-list').children.length === 1`);
+  await waitFor(
+    'the stored items',
+    `document.getElementById('item-list').children.length === 2`,
+  );
   check('signing in reaches the vault with the stored entry', true);
 } catch (error) {
   const banner = await evaluate(
@@ -418,7 +599,7 @@ try {
   check('signing in reaches the vault with the stored entry', false, banner || error.message);
 }
 
-// 8. A wrong password has to say so, on the page.
+// 9. A wrong password has to say so, on the page.
 await evaluate(`document.getElementById('vault-lock').click()`);
 await waitFor('the landing', visible('view-landing'));
 await evaluate(`location.hash = '#/login'`);
@@ -476,7 +657,7 @@ check(
   );
 }
 
-// 9. The desktop build, if this server has one to offer.
+// 10. The desktop build, if this server has one to offer.
 //
 // The expectation is read from the server rather than hard-coded, so this is correct both for a
 // server with a build and for one without. When there is a build, the file is downloaded and
@@ -557,7 +738,7 @@ check(
   }
 }
 
-// 10. Nothing threw along the way.
+// 11. Nothing threw along the way.
 check(
   'no uncaught errors in the page',
   pageErrors.length === 0,
