@@ -508,26 +508,47 @@
               <label class="field-label" for="item-name" data-i18n="item-name-label">Название</label>
               <input id="item-name" type="text" spellcheck="false" data-testid="item-name" />
             </div>
-            <!-- A project is nothing but a name filed inside the sealed record, so this is a
-                 free-text field with the names already in use offered as suggestions. It is
-                 deliberately not a `<select>`: a new project has to be creatable right here,
-                 at the moment a password is saved, or nobody will ever create one. -->
+            <!-- A project is nothing but a name filed inside the sealed record, so the picker
+                 offers the names already in use, «Без проекта», and an explicit «＋ Новый
+                 проект…»: a new project still has to be creatable right here, at the moment a
+                 password is saved, or nobody will ever create one. The field below the picker
+                 is the name for that last entry, and it is shown only while it is the chosen
+                 one. The entries themselves are built by `app.js`, because their wording comes
+                 from the locale tables and has to follow a language switch. -->
             <div class="field">
               <label class="field-label" for="item-project" data-i18n="item-project-label">
                 Проект
               </label>
-              <input
+              <select
                 id="item-project"
+                data-testid="item-project"
+                data-i18n="item-project-label"
+                data-i18n-attr="aria-label"
+                aria-label="Проект"
+              ></select>
+              <input
+                id="item-project-new"
+                class="project-new"
                 type="text"
-                list="project-options"
                 autocomplete="off"
                 spellcheck="false"
-                placeholder="Без проекта"
-                data-i18n="item-project-placeholder"
+                hidden
+                placeholder="Имя нового проекта"
+                data-i18n="item-project-new-placeholder"
                 data-i18n-attr="placeholder"
-                data-testid="item-project"
+                data-testid="item-project-new"
               />
-              <datalist id="project-options"></datalist>
+              <!-- Shown only when the open record's own project is not one of the names in use:
+                   the picker carries that name all the same, and this says why it is alone. -->
+              <p
+                class="note"
+                id="item-project-orphan-hint"
+                data-testid="item-project-orphan-hint"
+                data-i18n="item-project-orphan-hint"
+                hidden
+              >
+                Такого проекта больше нет среди записей — запись сохранит его имя.
+              </p>
             </div>
             <div class="field">
               <label class="field-label" for="item-username" data-i18n="item-username-label">

@@ -515,6 +515,29 @@ textarea {
   transition: border-color 0.15s ease;
 }
 
+/* The project picker is a `select` and has to read as the text fields around it: same field
+   colour, same hairline, same padding, and no rounding — the design has no radius to spend.
+   The platform's own arrow is left alone on purpose: it is the one part of a select that
+   everybody already recognises, and drawing our own would cost an image the CSP allows only
+   from this origin. */
+.field select,
+.project-new {
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--field);
+  color: var(--fg);
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  transition: border-color 0.15s ease;
+}
+
+.field select {
+  cursor: pointer;
+}
+
 textarea {
   min-height: 96px;
   resize: vertical;
@@ -527,10 +550,18 @@ input::placeholder {
 
 input:focus,
 textarea:focus,
+select:focus,
 .btn:focus-visible,
 .link:focus-visible {
   outline: none;
   border-color: var(--fg);
+}
+
+/* A select that has just been reached by keyboard looks like a button that has been: the
+   border alone is too quiet next to a field the person is typing into. */
+.field select:focus-visible {
+  outline: 1px solid var(--fg);
+  outline-offset: 2px;
 }
 
 .btn:focus-visible,

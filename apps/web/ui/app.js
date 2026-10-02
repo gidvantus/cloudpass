@@ -143,10 +143,31 @@ let selectedProject = null;
 let lastSync = null;
 /** Whether the editor holds an existing record or a new one. */
 let editingItem = false;
+/**
+ * What the editor's project picker is showing.
+ *
+ * The chosen entry, kept here rather than read back from the `<select>`, because the value the
+ * picker has to carry is not always a name in use: `NEW_PROJECT` is a choice rather than a
+ * project, and a record's own project may have stopped being one of the names in use. Held
+ * outside the element, it also survives the picker being rebuilt on a language switch — which
+ * is the point, since a switch may not cost anyone their answer.
+ */
+let editorProject = '';
 /** What the server offers as a desktop build, if anything. */
 let desktopBuild = null;
 /** Why the module never started, if it did not. */
 let bootFailure = null;
+
+/**
+ * The service value behind «＋ Новый проект…».
+ *
+ * It cannot be the empty string: that already means «Без проекта», and a picker that used one
+ * value for both would be unable to tell "file this under nothing" from "ask me for a name".
+ * It is deliberately not a name a person would file a password under — a project that somehow
+ * carried exactly this name would share the entry with the last one in the list, which is a
+ * smaller fault than the two answers being indistinguishable.
+ */
+const NEW_PROJECT = 'cloudpass.new-project';
 
 // --- plumbing ---------------------------------------------------------------
 
@@ -314,6 +335,7 @@ function renderDynamic() {
   renderProjects();
   renderItems();
   renderItemTitle();
+  renderProjectPicker();
   renderDesktop();
 }
 
@@ -386,6 +408,7 @@ async function signOut() {
   items = [];
   projects = [];
   selectedProject = null;
+  editorProject = '';
   lastSync = null;
   go('#/');
 }
@@ -687,7 +710,7 @@ async function loadItem(id) {
     const item = JSON.parse(await reveal_item(id));
     byId('item-id').value = id;
     byId('item-name').value = item.title;
-    byId('item-project').value = item.project || '';
+    editorProject = item.project || '';
     byId('item-username').value = item.username;
     byId('item-password').value = item.password;
     byId('item-url').value = item.url;
@@ -698,13 +721,13 @@ async function loadItem(id) {
     byId('item-id').value = '';
     // A new entry lands in whatever project the cabinet was showing. That is the whole point
     // of picking one before pressing «Добавить» — otherwise the choice would be decoration.
-    byId('item-project').value = selectedProject || '';
+    editorProject = selectedProject || '';
     editingItem = false;
     byId('item-delete').hidden = true;
   }
 
   renderItemTitle();
-  renderProjectOptions();
+  renderProjectPicker();
 }
 
 /**
@@ -721,22 +744,84 @@ async function loadProjectNames() {
   }
 }
 
-/** Offers the names already in use, without preventing a new one from being typed. */
-function renderProjectOptions() {
-  const options = byId('project-options');
-  options.replaceChildren();
+/**
+ * The project picker: «Без проекта», every name in use, and «＋ Новый проект…».
+ *
+ * Rebuilt whole rather than patched, because that is what makes a language switch free: the
+ * entries are the only text in it that the translator cannot reach — an `<option>` has no
+ * `data-i18n`, its wording is chosen here — and redrawing them from `editorProject` puts the
+ * new language on all of them without touching a single answer the person has given.
+ *
+ * The open record's own project gets an entry of its own when it is no longer one of the names
+ * in use: its last record was deleted, or a synchronization moved it. Leaving it out would
+ * silently re-file the record under «Без проекта» on the next save, and losing a grouping is
+ * worse than showing an entry nobody else has.
+ */
+function renderProjectPicker() {
+  const select = byId('item-project');
+  select.replaceChildren();
+
+  select.append(projectOption('', 'vault-no-project', 'item-project-none'));
 
   for (const name of projects) {
-    const option = document.createElement('option');
-    option.value = name;
-    options.append(option);
+    select.append(projectOption(name, null, 'item-project-option'));
   }
+
+  // Named as well as marked: the entry has to say which project it is about, because the list
+  // around it no longer does.
+  if (isOrphanProject()) {
+    const option = projectOption(editorProject, 'item-project-orphan', 'item-project-orphan');
+    option.textContent = t('item-project-orphan', { name: editorProject });
+    select.append(option);
+  }
+
+  select.append(projectOption(NEW_PROJECT, 'item-project-new-option', 'item-project-new'));
+
+  // The entry is always there by construction: it was either one of the names above, or the
+  // orphan entry, or the last one in the list.
+  select.value = editorProject;
+  renderProjectField();
+}
+
+/** One entry of the picker: its value is the project, its wording is a key. */
+function projectOption(value, key, testId) {
+  const option = document.createElement('option');
+  option.value = value;
+  option.setAttribute('data-testid', testId);
+  if (key) {
+    option.textContent = t(key);
+  } else {
+    // A project name is the user's own text, so it is written as it is and not translated.
+    option.textContent = value;
+  }
+  return option;
+}
+
+/** Whether the open record's project is one the vault no longer knows about. */
+function isOrphanProject() {
+  return (
+    editorProject !== '' && editorProject !== NEW_PROJECT && !projects.includes(editorProject)
+  );
+}
+
+/**
+ * The two things beside the picker that the chosen entry decides: the field for a new name, and
+ * the note explaining a project that is not in the list.
+ *
+ * Neither is ever cleared here. A language switch runs through this, and the name someone has
+ * half typed is their work, not the page's.
+ */
+function renderProjectField() {
+  byId('item-project-new').hidden = editorProject !== NEW_PROJECT;
+  byId('item-project-orphan-hint').hidden = !isOrphanProject();
 }
 
 function currentDraft() {
   return {
     title: byId('item-name').value,
-    project: byId('item-project').value,
+    // The picker's last entry is a question, not a name: what belongs in the record is what the
+    // field beside it holds.
+    project: editorProject === NEW_PROJECT ? byId('item-project-new').value : editorProject,
     username: byId('item-username').value,
     password: byId('item-password').value,
     url: byId('item-url').value,
@@ -857,9 +942,31 @@ byId('item-reveal').addEventListener('click', () => {
   say(byId('item-reveal'), revealing ? 'item-hide' : 'item-reveal');
 });
 
+byId('item-project').addEventListener('change', () => {
+  editorProject = byId('item-project').value;
+
+  // The field is emptied on the way in and on the way out: an entry that chose «Новый проект…»
+  // and came back to it is asking for a fresh name, and a name that was typed for a choice the
+  // person has since abandoned is a stale answer waiting to be saved by accident.
+  const field = byId('item-project-new');
+  field.value = '';
+  renderProjectField();
+
+  if (editorProject === NEW_PROJECT) {
+    field.focus();
+  }
+});
+
 byId('item-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   dismiss();
+
+  // «＋ Новый проект…» is a question before it is a value, and an unanswered one is not a
+  // project: the record stays where it is until it has a name.
+  if (editorProject === NEW_PROJECT && !byId('item-project-new').value.trim()) {
+    complain('item-project-error-empty');
+    return;
+  }
 
   const id = byId('item-id').value;
   try {
