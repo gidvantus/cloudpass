@@ -159,8 +159,10 @@ pub struct VaultStatus {
     pub pending_count: usize,
     pub identifier: Option<String>,
     pub user_id: Option<String>,
-    /// Where the vault lives, so the user can back it up.
-    pub data_directory: String,
+    /// Where the server is, for the one message that names it when it is unreachable. The
+    /// directory the vault is written to is deliberately not reported: it was carried for a
+    /// line at the bottom of the window, and a path on someone's screen is not worth the
+    /// thing it describes.
     pub server_url: String,
     /// Whether a session token is held.
     pub connected: bool,
@@ -169,9 +171,6 @@ pub struct VaultStatus {
     pub has_recovery_kit: bool,
     /// What the last synchronization did, if there was one.
     pub last_sync: Option<SyncNote>,
-    pub kdf_m_kib: u32,
-    pub kdf_t: u32,
-    pub kdf_p: u32,
 }
 
 /// An item as shown in a list. Deliberately without the password.
@@ -224,11 +223,6 @@ fn status_of(state: &AppState) -> Result<VaultStatus, ClientError> {
         (None, None) => (0, None, None),
     };
 
-    let params = account
-        .as_ref()
-        .map(|account| account.kdf_params)
-        .unwrap_or_default();
-
     Ok(VaultStatus {
         has_account: account.is_some(),
         unlocked: state.vault.is_some(),
@@ -236,16 +230,12 @@ fn status_of(state: &AppState) -> Result<VaultStatus, ClientError> {
         pending_count: pending,
         identifier,
         user_id,
-        data_directory: state.store.root().display().to_string(),
         server_url: state.server_url.clone(),
         connected: state.session.is_some(),
         has_recovery_kit: account
             .as_ref()
             .is_some_and(|account| account.recovery_envelope.is_some()),
         last_sync: state.last_sync.clone(),
-        kdf_m_kib: params.m_kib,
-        kdf_t: params.t,
-        kdf_p: params.p,
     })
 }
 

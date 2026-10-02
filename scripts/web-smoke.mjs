@@ -24,7 +24,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
-const serverUrl = process.argv[2] || 'http://127.0.0.1:8090';
+const serverUrl = process.argv[2] || 'http://127.0.0.1:8080';
 const here = dirname(fileURLToPath(import.meta.url));
 // `resolve`, not `join`: the second argument is very often an absolute path, and `join`
 // would happily glue it onto the working directory and produce a path that cannot exist.

@@ -73,9 +73,9 @@ body {
 
 /* --- the column ------------------------------------------------------------ */
 
-/* One column of bands, each separated from the next by a single hairline: the masthead,
-   the visible panel, the footer. The panel is a stripe in that column, not a card
-   floating on a background. */
+/* One column of bands, each separated from the next by a single hairline: the masthead and
+   the visible panel. The panel is a stripe in that column, not a card floating on a
+   background. */
 .shell {
   display: flex;
   flex-direction: column;
@@ -422,20 +422,6 @@ button:focus-visible {
   user-select: all;
   max-height: 340px;
   overflow-y: auto;
-}
-
-/* --- footer ---------------------------------------------------------------- */
-
-/* Where the application was called from and where it keeps its data. It wraps rather than
-   clipping: at the minimum window width the Argon2id parameters and the data directory
-   are long, and neither may be cut off or pushed out of the window. */
-.footer {
-  margin-top: auto;
-  padding-block: 22px 32px;
-  border-top: 1px solid var(--line);
-  font-size: 0.75rem;
-  color: var(--muted);
-  overflow-wrap: anywhere;
 }
 
 /* --- narrow window --------------------------------------------------------- */

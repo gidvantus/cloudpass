@@ -37,7 +37,8 @@ export default {
   'join-show-create': 'Create a vault on this machine',
 
   'thesis-password-title': 'The master password',
-  'thesis-password-text': 'It is stretched with Argon2id on this machine and never leaves it.',
+  'thesis-password-text':
+    'The master password never leaves the device. The key is derived locally with Argon2id, and the server keeps only what it cannot decrypt.',
   'thesis-server-title': 'What the server holds',
   'thesis-server-text':
     'Ciphertext: envelopes it cannot open, plus no key that could open them.',

@@ -1,11 +1,19 @@
 #!/usr/bin/env node
-// Generates the placeholder application icon.
+// Generates the application icon from the portal's favicon.
 //
-// Tauri's Windows build embeds an .ico from `bundle.icon`, and a missing file is a
-// build error rather than a warning. Rather than committing a binary nobody can
-// review, this script writes a deterministic 32x32 icon: a neutral rounded square with
-// the CloudPass ring. Replace it with a real design when one exists, and update
-// `tauri.conf.json` if the file name changes.
+// The mark is defined once, in `apps/web/ui/favicon.svg`: a black square, a hairline white
+// square inset from its edges, and a white dot in the middle. That file is what a browser tab
+// shows. This script draws the same geometry into the Windows `.ico` that Tauri embeds into
+// the executable and the installer, so the tab and the installed application carry one mark
+// rather than two similar ones.
+//
+// It is generated rather than committed as a binary blob because the shape has four numbers
+// and they are all in the SVG. Change the SVG, run this, and the icon follows.
+//
+// The icon holds every size Windows asks for: 16 and 20 in a list, 32 in the taskbar, 48 in
+// Explorer, 256 in the jumbo view. A single 32x32 would be scaled up by Explorer for the large
+// views and the hairline would blur into grey, so each size is drawn from the geometry rather
+// than resampled from a smaller one.
 //
 // Usage: node scripts/make-app-icon.mjs
 
@@ -17,70 +25,130 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const outputDir = join(repoRoot, 'apps', 'desktop', 'icons')
 const outputPath = join(outputDir, 'icon.ico')
 
-const SIZE = 32
+// The favicon's own coordinate system, and the four numbers that describe the mark:
+// `<rect width="32" height="32" fill="#000000">` is the background,
+// `<rect x="5" y="5" width="22" height="22" stroke-width="1.5">` is the hairline, and
+// `<circle cx="16" cy="16" r="3.5">` is the dot. Keep these in step with that file.
+const VIEWBOX = 32
+const EDGE = 5
+const SPAN = 22
+const STROKE = 1.5
+const DOT_RADIUS = 3.5
 
-/// Background, ring and highlight colours.
-const BACKGROUND = [0x1e, 0x29, 0x3b]
-const RING = [0x60, 0xa5, 0xfa]
+/// What Windows actually renders, smallest first.
+const SIZES = [16, 24, 32, 48, 64, 128, 256]
 
-function pixel(x, y) {
-  const cx = (SIZE - 1) / 2
-  const cy = (SIZE - 1) / 2
-  const distance = Math.hypot(x - cx, y - cy)
+/// Subpixels per axis. Four is enough for a 1.5-unit hairline at 16px — the thinnest case
+/// here — and keeps the whole script instant.
+const SAMPLES = 4
 
-  // A ring rather than a filled disc: it reads as a keyhole at 16px without detail.
-  if (distance > 12.5) return [0, 0, 0, 0]
-  if (distance > 9.0) return [...RING, 0xff]
-  // The inner dot of the ring.
-  if (distance < 3.0) return [...RING, 0xff]
-  return [...BACKGROUND, 0xff]
+/**
+ * Whether a point in the favicon's coordinates is part of the white mark.
+ *
+ * The stroked square is `outer minus inner`: a square stroke with miter joins covers the band
+ * between the path and the path offset by half the width on every side, so that subtraction
+ * is exact rather than an approximation of it.
+ */
+function isMark(x, y) {
+  const half = STROKE / 2
+  const outerLow = EDGE - half
+  const outerHigh = EDGE + SPAN + half
+  const innerLow = EDGE + half
+  const innerHigh = EDGE + SPAN - half
+
+  const inOuter = x >= outerLow && x <= outerHigh && y >= outerLow && y <= outerHigh
+  const inInner = x >= innerLow && x <= innerHigh && y >= innerLow && y <= innerHigh
+  if (inOuter && !inInner) return true
+
+  const dx = x - VIEWBOX / 2
+  const dy = y - VIEWBOX / 2
+  return dx * dx + dy * dy <= DOT_RADIUS * DOT_RADIUS
 }
 
-// BITMAPINFOHEADER, then the BGRA pixels bottom-up, then the 1bpp AND mask.
-const header = Buffer.alloc(40)
-header.writeUInt32LE(40, 0) // header size
-header.writeInt32LE(SIZE, 4) // width
-header.writeInt32LE(SIZE * 2, 8) // height: XOR + AND
-header.writeUInt16LE(1, 12) // planes
-header.writeUInt16LE(32, 14) // bits per pixel
-header.writeUInt32LE(0, 16) // BI_RGB
-header.writeUInt32LE(SIZE * SIZE * 4, 20) // XOR payload size
+/**
+ * Renders one size as bottom-up BGRA, which is what a BMP inside an `.ico` holds.
+ *
+ * The background stays opaque: the favicon is a filled black square rather than a mark on
+ * transparency, so the icon is the same square and reads the same on a light taskbar and a
+ * dark one.
+ */
+function render(size) {
+  const pixels = Buffer.alloc(size * size * 4)
+  const step = VIEWBOX / size
+  const samples = SAMPLES * SAMPLES
 
-const xor = Buffer.alloc(SIZE * SIZE * 4)
-for (let row = 0; row < SIZE; row++) {
-  const y = SIZE - 1 - row // bottom-up
-  for (let x = 0; x < SIZE; x++) {
-    const [r, g, b, a] = pixel(x, y)
-    const offset = (row * SIZE + x) * 4
-    xor[offset] = b
-    xor[offset + 1] = g
-    xor[offset + 2] = r
-    xor[offset + 3] = a
+  for (let row = 0; row < size; row++) {
+    // Row 0 is the bottom of the image; the source row counts from the top.
+    const top = size - 1 - row
+    for (let column = 0; column < size; column++) {
+      let hits = 0
+      for (let sy = 0; sy < SAMPLES; sy++) {
+        for (let sx = 0; sx < SAMPLES; sx++) {
+          const x = (column + (sx + 0.5) / SAMPLES) * step
+          const y = (top + (sy + 0.5) / SAMPLES) * step
+          if (isMark(x, y)) hits++
+        }
+      }
+
+      const level = Math.round((255 * hits) / samples)
+      const offset = (row * size + column) * 4
+      pixels[offset] = level // blue
+      pixels[offset + 1] = level // green
+      pixels[offset + 2] = level // red
+      pixels[offset + 3] = 0xff // opaque
+    }
   }
+
+  return pixels
 }
 
-// The AND mask is all zeroes: the alpha channel already carries transparency, and
-// every modern Windows renderer honours it.
-const maskStride = Math.ceil(SIZE / 32) * 4
-const mask = Buffer.alloc(maskStride * SIZE)
+/// Wraps BGRA pixels in the BITMAPINFOHEADER and AND mask an `.ico` image is made of.
+function bitmap(size, pixels) {
+  const header = Buffer.alloc(40)
+  header.writeUInt32LE(40, 0) // header size
+  header.writeInt32LE(size, 4) // width
+  header.writeInt32LE(size * 2, 8) // height: XOR + AND
+  header.writeUInt16LE(1, 12) // planes
+  header.writeUInt16LE(32, 14) // bits per pixel
+  header.writeUInt32LE(0, 16) // BI_RGB
+  header.writeUInt32LE(size * size * 4, 20) // XOR payload size
 
-const image = Buffer.concat([header, xor, mask])
+  // The AND mask is all zeroes: the alpha channel already carries the shape, and every
+  // renderer this icon reaches honours it.
+  const stride = Math.ceil(size / 32) * 4
+  const mask = Buffer.alloc(stride * size)
+
+  return Buffer.concat([header, pixels, mask])
+}
+
+const images = SIZES.map((size) => ({ size, bytes: bitmap(size, render(size)) }))
 
 const directory = Buffer.alloc(6)
 directory.writeUInt16LE(0, 0) // reserved
 directory.writeUInt16LE(1, 2) // type: icon
-directory.writeUInt16LE(1, 4) // one image
+directory.writeUInt16LE(images.length, 4)
 
-const entry = Buffer.alloc(16)
-entry.writeUInt8(SIZE, 0)
-entry.writeUInt8(SIZE, 1)
-entry.writeUInt8(0, 2) // palette size
-entry.writeUInt8(0, 3) // reserved
-entry.writeUInt16LE(1, 4) // colour planes
-entry.writeUInt16LE(32, 6) // bits per pixel
-entry.writeUInt32LE(image.length, 8)
-entry.writeUInt32LE(directory.length + entry.length, 12)
+let offset = directory.length + images.length * 16
+const entries = images.map(({ size, bytes }) => {
+  const entry = Buffer.alloc(16)
+  // 256 is written as 0: the field is a byte, and 256 does not fit in one. That is the format,
+  // not a truncation.
+  entry.writeUInt8(size >= 256 ? 0 : size, 0)
+  entry.writeUInt8(size >= 256 ? 0 : size, 1)
+  entry.writeUInt8(0, 2) // palette size
+  entry.writeUInt8(0, 3) // reserved
+  entry.writeUInt16LE(1, 4) // colour planes
+  entry.writeUInt16LE(32, 6) // bits per pixel
+  entry.writeUInt32LE(bytes.length, 8)
+  entry.writeUInt32LE(offset, 12)
+  offset += bytes.length
+  return entry
+})
+
+const ico = Buffer.concat([directory, ...entries, ...images.map((image) => image.bytes)])
 
 mkdirSync(outputDir, { recursive: true })
-writeFileSync(outputPath, Buffer.concat([directory, entry, image]))
-console.log(`wrote ${outputPath} (${directory.length + entry.length + image.length} bytes)`)
+writeFileSync(outputPath, ico)
+console.log(
+  `wrote ${outputPath} (${ico.length} bytes, ${SIZES.join('/')} in one icon)`,
+)
