@@ -363,14 +363,20 @@ button:focus-visible {
   border-top: 1px solid var(--line);
 }
 
+/* The row is a line: the item's own button takes what is left, and the copy button keeps
+   its width whatever the title and the username do to the row. */
 .item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   border-bottom: 1px solid var(--line);
 }
 
 /* A whole row is the target, not a word inside it: the title of an item is a long,
    unpredictable string, and a person aiming at it should not have to hit the text. */
 .item-button {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -389,6 +395,11 @@ button:focus-visible {
 .item-button:hover {
   background: none;
   color: var(--fg);
+}
+
+/* The copy button never shrinks: whatever a long title does to the row, it stays on it. */
+.item-copy {
+  flex: none;
 }
 
 .item-title {

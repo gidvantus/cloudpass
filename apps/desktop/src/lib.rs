@@ -62,6 +62,7 @@ pub fn run() {
             commands::set_server_url,
             commands::list_items,
             commands::reveal_item,
+            commands::copy_password,
             commands::add_item,
             commands::update_item,
             commands::delete_item,

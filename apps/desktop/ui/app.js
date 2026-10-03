@@ -152,6 +152,15 @@ function renderBanner() {
 }
 
 /**
+ * The same complaint, reachable from a script the Rust side evaluates in this window.
+ *
+ * A refused clipboard write happens in the page and inside a promise, so the command that
+ * asked for it has already returned by the time it is known. This is the way back: the
+ * clipboard script calls it with a locale key, and the key is translated here like any other.
+ */
+window.cloudpassSayBanner = (key) => complain({ key });
+
+/**
  * Turns a rejected command into something worth showing.
  *
  * A command rejects with `{ key, detail }`. The key is the contract, and the sentence is looked
@@ -271,38 +280,56 @@ function renderItems(items) {
   drawItems();
 }
 
-/** Draws the item list. Titles are user data, so they are set as text. */
+/** The row markup every item is drawn from, cloned rather than built element by element. */
+const itemRowTemplate = byId('item-row-template');
+
+/**
+ * Draws the item list. Titles are user data, so they are set as text.
+ *
+ * The clone is translated here, and that is not belt-and-braces: a `<template>` is a document
+ * fragment, not part of the document, so `applyTranslations()` walking the page never sees the
+ * markup inside it. Without this line every drawn button keeps the wording the template was
+ * written in — a list of Russian buttons on an English screen, whatever `data-i18n` says.
+ */
 function drawItems() {
   itemList.replaceChildren();
   emptyHint.hidden = lastItems.length > 0;
 
   for (const item of lastItems) {
-    const row = document.createElement('li');
-    row.className = 'item';
-    row.setAttribute('data-testid', 'item-row');
+    const row = itemRowTemplate.content.firstElementChild.cloneNode(true);
     row.setAttribute('data-item-id', item.id);
+    i18n.applyTranslations(row);
 
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'item-button';
+    const button = row.querySelector('.item-button');
     button.addEventListener('click', () => openEditor(item.id));
 
-    const title = document.createElement('span');
-    title.className = 'item-title';
-    title.textContent = item.title || t('vault-untitled');
-    button.append(title);
+    button.querySelector('.item-title').textContent = item.title || t('vault-untitled');
 
-    const subtitle = document.createElement('span');
-    subtitle.className = 'item-subtitle';
+    const subtitle = button.querySelector('.item-subtitle');
     const parts = [item.username, item.url].filter(Boolean);
     if (item.pending) {
       parts.push(t('vault-pending'));
     }
     subtitle.textContent = parts.join(' · ');
-    button.append(subtitle);
 
-    row.append(button);
+    // The password never reaches this code: the click asks the vault to put it on the
+    // clipboard itself, and the most this side ever learns is whether that worked.
+    const copy = row.querySelector('.item-copy');
+    copy.setAttribute('data-testid', `copy-password-${item.id}`);
+    copy.addEventListener('click', () => copyPassword(item.id, copy));
+
     itemList.append(row);
+  }
+}
+
+/** Copies one item's password, without the password entering this page. */
+async function copyPassword(id, button) {
+  clearComplaint();
+  try {
+    await withBusy(button, () => invoke('copy_password', { id }));
+    flash(button, 'vault-copied');
+  } catch (error) {
+    complain(describe(error));
   }
 }
 
@@ -388,6 +415,28 @@ async function withBusy(button, work) {
   } finally {
     button.disabled = false;
   }
+}
+
+/**
+ * Confirms an action on the button itself, without a dialog in the way.
+ *
+ * What is remembered is the button's *key*, not the sentence on it: a language switched
+ * while "Скопировано" is up would otherwise be answered in the language that has just been
+ * left. For the same reason the key is put back through `say`, which carries it into
+ * `data-i18n` — and a switch in the meantime redraws the list and this button with it.
+ */
+function flash(button, key) {
+  const original = button.dataset.i18n;
+  say(button, key);
+  button.disabled = true;
+  window.setTimeout(() => {
+    if (original) {
+      say(button, original);
+    } else {
+      button.textContent = '';
+    }
+    button.disabled = false;
+  }, 1200);
 }
 
 // --- wiring -----------------------------------------------------------------

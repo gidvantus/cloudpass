@@ -6,7 +6,9 @@
 //! items returns titles, usernames and URLs; a password crosses the boundary only when
 //! the user explicitly asks for that one item. A frontend rendering a list has no reason
 //! to hold a secret, so it is not given one, and a compromised frontend has that much
-//! less to steal.
+//! less to steal. One way of asking for a password does not cross the boundary at all:
+//! [`copy_password`] reads it here and puts it on the clipboard through a script evaluated
+//! in the page, so the value is never a return value.
 //!
 //! # Master passwords over IPC
 //!
@@ -30,7 +32,7 @@
 //! button.
 
 use serde::Serialize;
-use tauri::State;
+use tauri::{Manager, State};
 
 use cloudpass_client::recovery_code;
 use cloudpass_client::sync::{pending_changes, provision, SyncAccount, SyncEngine, SyncOutcome};
@@ -98,6 +100,15 @@ impl From<ClientError> for CommandError {
 }
 
 type CommandResult<T> = Result<T, CommandError>;
+
+/// The two ways putting a secret on the clipboard can fail, as keys.
+///
+/// The same pair the portal reports for its own clipboard: an interface with no clipboard at
+/// all, and one that refused the write. Keys rather than sentences, because the interface owns
+/// the wording — and the page turns each into `err-` plus the key, exactly as it does for a
+/// rejected command.
+const CLIPBOARD_INSECURE_ORIGIN: &str = "clipboard-insecure-origin";
+const CLIPBOARD_DENIED: &str = "clipboard-denied";
 
 /// What the last synchronization did, as a key and the numbers that go with it.
 ///
@@ -725,6 +736,77 @@ pub async fn reveal_item(state: State<'_, SharedState>, id: String) -> CommandRe
     Ok(item.draft())
 }
 
+/// Copies one item's password to the clipboard, without handing it to the page.
+///
+/// This is the whole of "hidden copying", and it is the reason the rule at the top of this
+/// module still holds: the secret is read here, travels to the clipboard as a JavaScript
+/// literal inside an eval'd script, and is wiped when this function returns. It is never a
+/// return value, so the page cannot render it, keep it, or have it taken out of the DOM.
+///
+/// The write itself happens in the page because `navigator.clipboard` belongs to the document
+/// — WebView2 exposes it to the web view and to nothing else. That is also why the two ways it
+/// can fail are reported from the page: `writeText` answers with a promise, and an `eval` has
+/// no way to wait for one.
+#[tauri::command]
+pub async fn copy_password(
+    app: tauri::AppHandle,
+    state: State<'_, SharedState>,
+    id: String,
+) -> CommandResult<()> {
+    let mut state = state.lock().await;
+    let id = parse_id(&id)?;
+    let vault = state.unlocked().map_err(CommandError::from)?;
+
+    // A `Zeroizing`, not a plain `String`, and the only owner of the value: the item itself
+    // stays in the vault, and this copy does not outlive the call.
+    let secret = match vault.item(id) {
+        Some(item) => Zeroizing::new(item.password.clone()),
+        None => return Err(CommandError::from(ClientError::ItemNotFound)),
+    };
+
+    let script = clipboard_script(secret.as_str())?;
+    // The window this application has always had. Failing to find it is not a clipboard
+    // problem, but it is the page that would have shown the refusal either way.
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| CommandError::of_key(CLIPBOARD_DENIED))?;
+
+    window
+        .eval(&script)
+        .map_err(|_| CommandError::of_key(CLIPBOARD_DENIED))
+}
+
+/// The script that puts `secret` on the clipboard, with the secret as a JSON literal.
+///
+/// The escaping is `serde_json::to_string` and not a hand-built quote: a password may contain
+/// anything, and a literal assembled by concatenation is one quote away from being code.
+///
+/// Which of the two failures happened is decided here rather than in Rust, because only the
+/// page can see it: `navigator.clipboard` is missing synchronously when the window does not
+/// offer one, and the promise `writeText` returns rejects when the write is refused. Both are
+/// said out loud through `window.cloudpassSayBanner`, which the frontend wires to its banner —
+/// a "copied" button that copied nothing would be worse than one that explains itself.
+fn clipboard_script(secret: &str) -> CommandResult<String> {
+    let literal = serde_json::to_string(secret)
+        .map_err(|error| CommandError::from(ClientError::Serialization(error)))?;
+
+    Ok(format!(
+        "(function () {{\n\
+           const say = window.cloudpassSayBanner;\n\
+           const clipboard = navigator.clipboard;\n\
+           if (!clipboard || typeof clipboard.writeText !== 'function') {{\n\
+             if (say) {{ say('err-{insecure}'); }}\n\
+             return;\n\
+           }}\n\
+           clipboard.writeText({literal}).catch(function () {{\n\
+             if (say) {{ say('err-{denied}'); }}\n\
+           }});\n\
+         }})();",
+        insecure = CLIPBOARD_INSECURE_ORIGIN,
+        denied = CLIPBOARD_DENIED,
+    ))
+}
+
 /// Adds an item and returns its id.
 #[tauri::command]
 pub async fn add_item(state: State<'_, SharedState>, draft: ItemDraft) -> CommandResult<String> {
@@ -877,4 +959,35 @@ pub async fn pending_count(state: State<'_, SharedState>) -> CommandResult<usize
 
 fn parse_id(value: &str) -> CommandResult<Uuid> {
     Uuid::parse_str(value).map_err(|_| CommandError::of_key("bad_id"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The one line where a password meets code, held to what it promises.
+    ///
+    /// It is the only part of `copy_password` a test can reach — the rest needs a live window —
+    /// and it is the part that matters: the secret is written into a script as a *literal*, so
+    /// a password containing a quote, a backslash or a newline must not be able to end that
+    /// literal or start a statement of its own. The two failures are pinned as well, because a
+    /// clipboard that refuses silently is the bug the page is there to prevent.
+    #[test]
+    fn a_secret_becomes_a_literal_and_not_code() {
+        let secret = "pa\"ss\\word\n</script> \u{2028}'`";
+        let literal = serde_json::to_string(secret).expect("a string always serializes");
+
+        let script = clipboard_script(secret).expect("a string always serializes");
+
+        assert!(
+            script.contains(&format!("writeText({literal})")),
+            "the secret is not written as the literal serde_json produced: {script}"
+        );
+        assert!(
+            !script.contains(secret),
+            "the raw secret survives into the script, escape included: {script}"
+        );
+        assert!(script.contains("err-clipboard-insecure-origin"));
+        assert!(script.contains("err-clipboard-denied"));
+    }
 }
