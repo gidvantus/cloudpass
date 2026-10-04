@@ -86,6 +86,7 @@ pub async fn init(database_url: &str) -> ApiResult<Arc<AppState>> {
     if let Some(build) = &desktop_build {
         tracing::info!(
             file = %build.file_name,
+            version = %build.version.as_deref().unwrap_or("unknown"),
             bytes = build.size,
             sha256 = %build.sha256,
             "offering a desktop build for download"

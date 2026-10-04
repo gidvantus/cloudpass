@@ -33,6 +33,44 @@ pub struct DesktopBuild {
     pub sha256: String,
     /// Where a browser fetches it, relative to the server's own origin.
     pub url: String,
+    /// The version this artifact was built as, read out of its file name.
+    ///
+    /// `None` when the name carries no version — an installer renamed by hand, or one
+    /// produced by a build that never had a version to stamp. That is a normal answer
+    /// rather than a failure: the file is still described and still downloadable, and a
+    /// client that was hoping to compare versions simply learns nothing.
+    pub version: Option<String>,
+}
+
+/// Reads the version out of an installer's file name.
+///
+/// `CloudPass_1.2.3_x64-setup.exe` is the shape the build script produces, and the version
+/// is the field between the underscores that parses as semantic versioning. The name is
+/// split on `_` rather than searched with a pattern, so that a version embedded in some
+/// other part of the name — a build host, a date — cannot be mistaken for the artifact's
+/// own; a field that does not parse whole is then split on `-`, which is what covers a name
+/// like `CloudPass-1.2.3-x64-setup.exe`.
+///
+/// A name that yields nothing returns `None`. The answer is the *canonical* form of the
+/// parsed version, so a client never has to wonder whether `1.2.3` and `v1.2.3` describe
+/// the same build.
+#[must_use]
+pub fn parse_version(file_name: &str) -> Option<String> {
+    let stem = file_name
+        .rsplit_once('.')
+        .map_or(file_name, |(stem, _extension)| stem);
+
+    stem.split('_')
+        .filter(|field| !field.is_empty())
+        .find_map(|field| {
+            semver::Version::parse(field).ok().or_else(|| {
+                field
+                    .split('-')
+                    .filter(|piece| !piece.is_empty())
+                    .find_map(|piece| semver::Version::parse(piece).ok())
+            })
+        })
+        .map(|version| version.to_string())
 }
 
 /// Extensions that mean "a Windows program", in the order we prefer them.
@@ -81,6 +119,7 @@ pub fn find_build(directory: &Path) -> Option<DesktopBuild> {
     Some(DesktopBuild {
         url: format!("/download/{file_name}"),
         sha256: hash_file(&path)?,
+        version: parse_version(&file_name),
         size,
         file_name,
     })
@@ -224,6 +263,60 @@ mod tests {
         let build = find_build(&dir).expect("found");
         assert_eq!(build.file_name, "CloudPass_0.1.0_x64-setup.exe");
         assert_eq!(build.size, 3);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The version is what a desktop client compares itself against, so it has to come out
+    /// of the name the build script produces — and out of nothing at all when the name does
+    /// not carry one.
+    #[test]
+    fn the_version_is_read_out_of_the_installer_name() {
+        assert_eq!(
+            parse_version("CloudPass_1.2.3_x64-setup.exe").as_deref(),
+            Some("1.2.3")
+        );
+        assert_eq!(
+            parse_version("CloudPass-2.0.10-x64-setup.msi").as_deref(),
+            Some("2.0.10")
+        );
+        assert_eq!(
+            parse_version("cloudpass_0.1.0.exe").as_deref(),
+            Some("0.1.0")
+        );
+        // A build host or a date in the name is not the artifact's version, and a name with
+        // no version must say so rather than borrow a number from somewhere else.
+        assert_eq!(parse_version("CloudPass_x64-setup.exe"), None);
+        assert_eq!(parse_version("CloudPass_2024_11_05-setup.exe"), None);
+        assert_eq!(parse_version("setup.exe"), None);
+    }
+
+    #[test]
+    fn a_described_build_carries_the_version_from_its_name() {
+        let dir = scratch("version");
+        let file = dir.join("CloudPass_1.2.3_x64-setup.exe");
+        fs::write(&file, b"installer").expect("write");
+
+        let build = find_build(&dir).expect("found");
+        assert_eq!(build.version.as_deref(), Some("1.2.3"));
+        // Everything else about the description is unchanged by the addition.
+        assert_eq!(build.file_name, "CloudPass_1.2.3_x64-setup.exe");
+        assert_eq!(build.url, "/download/CloudPass_1.2.3_x64-setup.exe");
+        assert_eq!(build.size, "installer".len() as u64);
+        assert_eq!(build.sha256.len(), 64);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_build_whose_name_has_no_version_is_described_without_one() {
+        let dir = scratch("noversion");
+        fs::write(dir.join("CloudPass_x64-setup.exe"), b"installer").expect("write");
+
+        let build = find_build(&dir).expect("found");
+        assert_eq!(build.version, None);
+        assert_eq!(build.file_name, "CloudPass_x64-setup.exe");
+        assert_eq!(build.sha256.len(), 64);
 
         let _ = fs::remove_dir_all(&dir);
     }

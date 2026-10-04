@@ -41,6 +41,13 @@ pub struct DesktopBuildDto {
     pub size: u64,
     /// Lowercase hex SHA-256 of the file's bytes.
     pub sha256: String,
+    /// The version this artifact was built as, read out of its file name.
+    ///
+    /// `null` when the name carries no version. A desktop client uses this to tell whether
+    /// the build it was installed from is behind the one being offered; a client that does
+    /// not care about updates — the portal, for one — sees the same object it always did
+    /// with one more field in it.
+    pub version: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -70,6 +77,7 @@ pub async fn meta(State(state): State<Arc<AppState>>) -> Json<MetaResponse> {
             url: build.url.clone(),
             size: build.size,
             sha256: build.sha256.clone(),
+            version: build.version.clone(),
         }),
     })
 }
