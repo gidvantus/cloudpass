@@ -153,6 +153,15 @@ export default {
   'sync-password-changed': 'мастер-пароль изменён',
   'sync-not-connected': 'нет связи с {url}',
 
+  // `update-*` speaks about this application rather than the vault: a newer build is on
+  // the server, and the only thing this window may do about it is hand the person the
+  // address. `update-available` and `update-copied` are chosen from data at run time, so
+  // they are never written in the markup.
+  'update-available': 'Доступна версия {latest} — у вас {current}.',
+  'update-download': 'Скопировать адрес портала',
+  'update-copied': 'Адрес скопирован',
+  'update-dismiss': 'Скрыть',
+
   'err-passwords-mismatch': 'Пароли не совпадают.',
   'err-passwords-mismatch-new': 'Новые пароли не совпадают.',
   'err-password-short':
@@ -183,5 +192,7 @@ export default {
   'err-clipboard-insecure-origin':
     'Окно приложения не предоставляет доступ к буферу обмена.',
   'err-clipboard-denied': 'Приложение отказало в доступе к буферу обмена.',
+  'err-update-check-failed':
+    'Не удалось проверить обновления. Проверьте, что сервер запущен, и попробуйте снова.',
   'err-unknown': 'Операция не удалась.',
 };

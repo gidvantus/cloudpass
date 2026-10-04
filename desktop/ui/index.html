@@ -39,6 +39,35 @@
 
       <p class="banner" id="banner" hidden></p>
 
+      <!-- A newer build exists. It sits beside the banner because it is the same kind of
+           thing: something the application has to say, said once, and dismissible. The
+           button is named "download" after what the person is trying to do; what it
+           actually does is copy the portal's address, because opening a browser or
+           launching an installer is not among this window's permissions and deliberately
+           never will be. -->
+      <section class="update" id="update-notice" data-testid="update-notice" hidden>
+        <p class="update-text" id="update-text" data-testid="update-text"></p>
+        <div class="row-actions">
+          <button
+            type="button"
+            id="update-download"
+            data-testid="update-download"
+            data-i18n="update-download"
+          >
+            Скопировать адрес портала
+          </button>
+          <button
+            type="button"
+            class="secondary"
+            id="update-dismiss"
+            data-testid="update-dismiss"
+            data-i18n="update-dismiss"
+          >
+            Скрыть
+          </button>
+        </div>
+      </section>
+
       <!-- Sign in. First gate for a machine that has no local account yet ------ -->
       <section class="panel panel-split" id="join-panel" data-testid="join-panel" hidden>
         <div class="panel-main">

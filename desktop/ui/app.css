@@ -333,6 +333,26 @@ button:focus-visible {
   line-height: 1.5;
 }
 
+/* The update notice: the same shape as the banner, outlined rather than filled. It says
+   something good — a newer version exists — and it is not an error, so it must not use the
+   colour that means "something went wrong". It never covers the banner or the Kit panel:
+   all three are ordinary blocks in the shell and the page pushes them down in turn. */
+.update {
+  margin: 18px 0 0;
+  padding: 14px 20px;
+  border: 1px solid var(--fg);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.update-text {
+  margin: 0 0 12px;
+}
+
+.update .row-actions {
+  margin: 0;
+}
+
 /* --- layout helpers -------------------------------------------------------- */
 
 .row {
