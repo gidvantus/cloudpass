@@ -27,6 +27,7 @@
 mod commands;
 pub mod state;
 pub mod transport;
+pub mod update;
 
 use std::sync::Arc;
 
@@ -48,6 +49,14 @@ pub fn run() {
             let store = FileStore::new(directory)?;
             let state = AppState::new(store, AppState::default_server_url());
             app.manage(Arc::new(tokio::sync::Mutex::new(state)));
+
+            // The update check runs for as long as the window does. It is spawned here
+            // rather than awaited, because the first screen must not wait on a server that
+            // may not be there — and its failures are its own business, not the user's.
+            let shared = app.state::<state::SharedState>().inner().clone();
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(commands::poll_updates(handle, shared));
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -68,6 +77,8 @@ pub fn run() {
             commands::delete_item,
             commands::sync_now,
             commands::pending_count,
+            commands::update_status,
+            commands::check_for_update,
         ])
         .run(tauri::generate_context!())
         .expect("the CloudPass window failed to start");

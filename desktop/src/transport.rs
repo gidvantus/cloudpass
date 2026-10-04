@@ -10,6 +10,8 @@
 //! not vary with the machine it was built on, and a bundled stack is one fewer thing
 //! that can be quietly misconfigured by the environment.
 
+use std::time::Duration;
+
 use cloudpass_client::sync::{HttpRequest, HttpResponse, Method, Transport};
 use cloudpass_client::ClientError;
 
@@ -22,11 +24,29 @@ pub struct HttpTransport {
 impl HttpTransport {
     /// Builds a transport for a server URL such as `http://127.0.0.1:8080`.
     pub fn new(base_url: &str) -> Result<Self, ClientError> {
-        let client = reqwest::Client::builder()
+        Self::build(base_url, None)
+    }
+
+    /// Builds a transport that gives up on an answer after `timeout`.
+    ///
+    /// For requests nobody is waiting in front of — the update check, which runs in the
+    /// background — where a server that has stopped answering must not leave a task
+    /// holding the application's state lock, and therefore the vault, until it does.
+    pub fn with_timeout(base_url: &str, timeout: Duration) -> Result<Self, ClientError> {
+        Self::build(base_url, Some(timeout))
+    }
+
+    fn build(base_url: &str, timeout: Option<Duration>) -> Result<Self, ClientError> {
+        let mut builder = reqwest::Client::builder()
             // A password manager talking to its own server has no use for a proxy, and
             // honouring one silently would send vault metadata somewhere it does not
             // belong.
-            .no_proxy()
+            .no_proxy();
+        if let Some(timeout) = timeout {
+            builder = builder.timeout(timeout);
+        }
+
+        let client = builder
             .build()
             .map_err(|error| ClientError::Transport(error.to_string()))?;
 

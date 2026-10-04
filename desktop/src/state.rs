@@ -176,6 +176,19 @@ impl Store for FileStore {
     }
 }
 
+/// The last answer to "is there a build newer than this one".
+///
+/// One field, because the question has one answer. `latest` holds the version the server
+/// published when that version is newer than this build, and `None` for every situation in
+/// which there is nothing to say: no server, a server too old to publish a version, an
+/// installer whose name carries none, or simply the version already installed. The
+/// interface has one thing to decide — whether to draw a notice — and it cannot act on the
+/// difference between those cases, so nothing here records it.
+#[derive(Debug, Clone, Default)]
+pub struct UpdateCache {
+    pub latest: Option<String>,
+}
+
 /// The whole application's state, guarded by one lock.
 ///
 /// A single lock rather than one per field on purpose: the vault and the store it
@@ -199,6 +212,9 @@ pub struct AppState {
     /// A key rather than a sentence: the interface owns the wording, and this side does not
     /// know what language the reader chose. `commands::SyncNote` is the shape.
     pub last_sync: Option<crate::commands::SyncNote>,
+    /// The last answer to "is there a newer build", so the interface can draw a notice
+    /// without a request every time it repaints.
+    pub update: UpdateCache,
 }
 
 impl AppState {
@@ -210,6 +226,7 @@ impl AppState {
             server_url,
             session: None,
             last_sync: None,
+            update: UpdateCache::default(),
         }
     }
 
