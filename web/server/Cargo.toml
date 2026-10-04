@@ -7,7 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-cloudpass-core = { path = "../cloudpass-core" }
+cloudpass-core = { path = "../../crates/cloudpass-core" }
 
 axum = { workspace = true }
 tokio = { workspace = true }
@@ -28,7 +28,7 @@ tower = { workspace = true }
 # The client crate is a dev-dependency only, and only so that `tests/interop.rs` can
 # drive the real sync engine against the real router. The server itself must never
 # depend on a client: that would invert the trust relationship the design rests on.
-cloudpass-client = { path = "../cloudpass-client" }
+cloudpass-client = { path = "../../crates/cloudpass-client" }
 
 [[bin]]
 name = "cloudpass-server"

@@ -1,7 +1,11 @@
 # CloudPass, running locally: the sync server and the web portal it serves.
 #
-#   docker compose up --build
+#   docker compose -f web/compose.yaml up --build
 #   → http://localhost:8080
+#
+# The file lives in `web/` with the rest of that part, so run it from the repository root
+# with an explicit `-f`, or from inside `web/` without one. Relative paths below resolve
+# against this file's directory, not against the shell's working directory.
 #
 # 8080 is the project's one address: the server binds it by default, the desktop application
 # points at it by default, and the smoke tests assume it. The container's host-side port
@@ -10,14 +14,17 @@
 # means the same thing in every other part.
 #
 # The first build compiles the whole dependency tree and takes several minutes. Later builds
-# reuse the cargo caches mounted in the Dockerfile, so a change to `crates/` or `apps/web/`
+# reuse the cargo caches mounted in the Dockerfile, so a change to `crates/` or `web/web/`
 # recompiles only what moved.
 
 services:
   cloudpass:
     build:
-      context: .
-      dockerfile: Dockerfile
+      # The build context is the repository root, not `web/`: the Dockerfile compiles the
+      # whole cargo workspace, and the portal, the server and the shared `crates/` all have
+      # to be visible to that one build. `dockerfile` is resolved relative to the context.
+      context: ..
+      dockerfile: web/Dockerfile
     image: cloudpass:local
     container_name: cloudpass
 

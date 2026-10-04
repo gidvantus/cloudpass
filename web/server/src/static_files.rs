@@ -58,7 +58,7 @@ pub const CONTENT_SECURITY_POLICY: &str = "default-src 'none'; \
 pub fn default_root() -> PathBuf {
     std::env::var("CLOUDPASS_WEB_ROOT")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("apps/web/ui"))
+        .unwrap_or_else(|_| PathBuf::from("web/web/ui"))
 }
 
 /// Resolves the configured root once, at startup.

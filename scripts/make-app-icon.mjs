@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Generates the application icon from the portal's favicon.
 //
-// The mark is defined once, in `apps/web/ui/favicon.svg`: a black square, a hairline white
+// The mark is defined once, in `web/web/ui/favicon.svg`: a black square, a hairline white
 // square inset from its edges, and a white dot in the middle. That file is what a browser tab
 // shows. This script draws the same geometry into the Windows `.ico` that Tauri embeds into
 // the executable and the installer, so the tab and the installed application carry one mark
@@ -22,7 +22,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
-const outputDir = join(repoRoot, 'apps', 'desktop', 'icons')
+const outputDir = join(repoRoot, 'desktop', 'icons')
 const outputPath = join(outputDir, 'icon.ico')
 
 // The favicon's own coordinate system, and the four numbers that describe the mark:

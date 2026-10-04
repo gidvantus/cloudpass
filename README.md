@@ -20,7 +20,7 @@
 ## Структура
 
 ```
-crates/cloudpass-core/    # криптография, форматы, ключи — компилируется в native и в WASM
+crates/cloudpass-core/    # криптография, форматы, ключи — общий, компилируется в native и в WASM
   src/aad.rs              # associated data: привязка шифротекста к месту и ревизии
   src/device.rs           # Ed25519-ключ устройства: подпись и проверка
   src/envelope.rs         # версионированный AEAD-контейнер
@@ -32,7 +32,7 @@ crates/cloudpass-core/    # криптография, форматы, ключи
   src/secret.rs           # SecretKey: zeroize + редактированный Debug
   src/vault.rs            # иерархия ключей и операции над записями
 
-crates/cloudpass-client/  # клиентская логика: аккаунт, шифрованные записи, хранилище, синхронизация
+crates/cloudpass-client/  # клиентская логика: общий, используется и порталом, и desktop
   src/item.rs             # предметная модель записи
   src/store.rs            # что устройство помнит, и шов для персистентности
   src/vault.rs            # разблокированное хранилище: создать, открыть, добавить, удалить
@@ -41,27 +41,29 @@ crates/cloudpass-client/  # клиентская логика: аккаунт, �
   src/sync/engine.rs      # pull, проверка головы, push с подписанным обязательством
   src/sync/provision.rs   # регистрация и вход по HTTP через OPAQUE
 
-crates/cloudpass-server/  # сервер синхронизации: хранит только непрозрачные конверты
-  src/db.rs               # схема БД, миграции, примитивы хранения
-  src/auth.rs             # сессии, устройства, извлечение вызывающего
-  src/routes/             # HTTP-поверхность: аккаунты, устройства, хранилища, синхронизация
+web/                      # часть 1: портал и сервер, который его раздаёт
+  web/                    # крейт cloudpass-web: та же библиотека, скомпилированная в WASM
+    src/portal.rs         # API для страницы: регистрация, вход, записи, скрытое копирование
+    src/transport.rs      # fetch и клипборд браузера
+    ui/                   # страница: разметка, стили и модуль; ключей не видит
+    ui/fonts/             # Montserrat (кириллица + латиница) и её лицензия OFL
+    ui/pkg/               # сгенерированное: wasm + JS-обвязка (в git не хранится)
+    ui/download/          # сюда build-desktop.ps1 кладёт установщик; его же раздаёт сервер
+  server/                 # крейт cloudpass-server: хранит только непрозрачные конверты
+    src/db.rs             # схема БД, миграции, примитивы хранения
+    src/auth.rs           # сессии, устройства, извлечение вызывающего
+    src/routes/           # HTTP-поверхность: аккаунты, устройства, хранилища, синхронизация
+  Dockerfile              # сервер + портал в одном образе (multi-stage)
+  compose.yaml            # запуск одной командой, данные в томе
 
-apps/desktop/             # Tauri 2: доверенный клиент, вся криптография в Rust
+desktop/                  # часть 2: Tauri 2, доверенный клиент, вся криптография в Rust
   src/commands.rs         # команды: единственный путь фронтенда к хранилищу
   src/state.rs            # файловое хранилище и состояние приложения
   src/transport.rs        # HTTP-транспорт на reqwest
   ui/                     # тонкий слой отображения, без доступа к ключам
   capabilities/           # разрешены только core-возможности окна
 
-apps/web/                 # web-портал: та же библиотека, скомпилированная в WASM
-  src/portal.rs           # API для страницы: регистрация, вход, записи, скрытое копирование
-  src/transport.rs        # fetch и клипборд браузера
-  ui/                     # страница: разметка, стили и модуль; ключей не видит
-  ui/fonts/               # Montserrat (кириллица + латиница) и её лицензия OFL
-  ui/pkg/                 # сгенерированное: wasm + JS-обвязка (в git не хранится)
-  ui/download/            # сюда build-desktop.ps1 кладёт установщик; его же раздаёт сервер
-
-docs/                     # проектные документы
+docs/                     # проектные документы, общие для обеих частей
 scripts/env.ps1           # настройка окружения разработки
 scripts/build-web.ps1     # сборка web-портала: wasm + обвязка
 scripts/build-desktop.ps1 # сборка приложения и установщика, кладёт их в раздачу сервера
@@ -69,10 +71,11 @@ scripts/web-smoke.mjs     # сквозная проверка wasm-модуля 
 scripts/browser-check.mjs # то же в настоящем браузере, через Chrome DevTools Protocol
 scripts/verify-argon2-reference.mjs   # независимая проверка Argon2id (OpenSSL через Node)
 scripts/make-app-icon.mjs             # иконка приложения из favicon портала
-
-Dockerfile                # сервер + портал в одном образе (multi-stage)
-compose.yaml              # запуск одной командой, данные в томе
 ```
+
+`scripts/` остаётся в корне, потому что ни одной части он не принадлежит: сборка установщика
+начинается в `desktop/` и кладёт результат в `web/web/ui/download/`, откуда его раздаёт
+сервер, а проверка локалей читает таблицы обеих частей сразу.
 
 ## Инварианты ядра
 
@@ -141,7 +144,7 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo build -p cloudpass-desktop
 .\target\debug\cloudpass-desktop.exe
 
-# Web-портал: wasm + JS-обвязка в apps/web/ui/pkg (нужен wasm-bindgen-cli 0.2.129)
+# Web-портал: wasm + JS-обвязка в web/web/ui/pkg (нужен wasm-bindgen-cli 0.2.129)
 .\scripts\build-web.ps1
 
 # Браузерная сборка ядра: серверная половина OPAQUE в неё не попадает
@@ -180,7 +183,7 @@ node scripts\web-smoke.mjs http://127.0.0.1:8080
 ### Как это запустить целиком
 
 ```powershell
-# 1. собрать web-портал (один раз, и после каждой правки apps/web)
+# 1. собрать web-портал (один раз, и после каждой правки web/web)
 .\scripts\build-web.ps1
 
 # 2. сервер — он же раздаёт портал
@@ -191,7 +194,7 @@ cargo build -p cloudpass-desktop
 .\target\debug\cloudpass-desktop.exe
 
 # 4. приложение на компьютер — чтобы раздавать со своего сервера
-.\scripts\build-desktop.ps1     # кладёт установщик в apps/web/ui/download/
+.\scripts\build-desktop.ps1     # кладёт установщик в web/web/ui/download/
 ```
 
 Портал открывается на `http://127.0.0.1:8080` — том же адресе, что и API, поэтому нет ни
@@ -202,7 +205,7 @@ CORS, ни второго источника в цепочке доверия. D
 ### Скачивание приложения с портала
 
 `scripts/build-desktop.ps1` собирает релиз и NSIS-установщик (`npx @tauri-apps/cli build`)
-и кладёт результат в `apps/web/ui/download/`. Дальше ничего настраивать не нужно: сервер
+и кладёт результат в `web/web/ui/download/`. Дальше ничего настраивать не нужно: сервер
 ищет сборку рядом с порталом, считает её SHA-256 при старте и публикует в `/api/v1/meta`.
 Лендинг спрашивает этот эндпоинт и показывает блок скачивания — с именем файла, размером и
 хешем.
@@ -237,7 +240,7 @@ node .\scripts\web-smoke.mjs http://127.0.0.1:8080
 командой. В образе есть и то, и другое: сервер раздаёт портал с того же адреса.
 
 ```bash
-docker compose up --build
+docker compose -f web/compose.yaml up --build
 # → http://localhost:8080
 ```
 
@@ -247,15 +250,15 @@ docker compose up --build
 8080 уже занят, внешний номер сдвигается без правки файла:
 
 ```bash
-CLOUDPASS_PORT=8090 docker compose up -d          # POSIX shell
-$env:CLOUDPASS_PORT=8090; docker compose up -d    # PowerShell
+CLOUDPASS_PORT=8090 docker compose -f web/compose.yaml up -d          # POSIX shell
+$env:CLOUDPASS_PORT=8090; docker compose -f web/compose.yaml up -d    # PowerShell
 ```
 
 Что нужно знать про этот образ:
 
 - **Первая сборка долгая** (несколько минут): компилируется всё дерево зависимостей и под
   хост, и под wasm. Дальше cargo-кэши смонтированы, поэтому пересборка после правки
-  `crates/` или `apps/web/` компилирует только изменившееся.
+  `crates/` или `web/web/` компилирует только изменившееся.
 - **`rust-toolchain.toml` уважается, и это стоит одной оговорки.** В репозитории он
   закрепляет `channel = "stable"`, а rustup выбирает тулчейн по текущему каталогу — то есть
   не тот, что является дефолтным в базовом образе. Поэтому `rustup target add
@@ -279,9 +282,9 @@ $env:CLOUDPASS_PORT=8090; docker compose up -d    # PowerShell
 Полезное:
 
 ```bash
-docker compose logs -f cloudpass      # что сервер пишет
-docker compose down                   # остановить, том сохранить
-docker compose down -v                # остановить и стереть все данные
+docker compose -f web/compose.yaml logs -f cloudpass      # что сервер пишет
+docker compose -f web/compose.yaml down                   # остановить, том сохранить
+docker compose -f web/compose.yaml down -v                # остановить и стереть все данные
 
 # Проверить контейнер ровно тем артефактом, который он отдаёт браузеру: скачать модуль
 # с самого сервера и прогнать smoke-тест против него, а не против локальной сборки.
@@ -335,7 +338,7 @@ cd ../.. && node scripts/web-smoke.mjs http://127.0.0.1:8080 target/container-pk
 
 **Шрифт хостится сам.** CSP портала — `default-src 'none'`, и правило проекта прямо
 запрещает внешние источники, поэтому Google Fonts здесь невозможен: два сабсета
-(кириллица и латиница, 62 КБ вместе с `OFL.txt`) лежат в `apps/web/ui/fonts/` и отдаются
+(кириллица и латиница, 62 КБ вместе с `OFL.txt`) лежат в `web/web/ui/fonts/` и отдаются
 тем же сервером. `font-src 'self'` в CSP — это то, что делает такой шрифт загружаемым.
 Отдавать `.woff2` как `application/octet-stream` нельзя: браузер такой шрифт молча
 игнорирует и подставляет системный, а вёрстка «ломается сама».
@@ -354,8 +357,8 @@ Kit: там переходов нет по построению, поэтому 
 текущий маршрут `#/…`: перерисовывается только то, что зависит от состояния.
 
 **Формулировка живёт в одном месте — в таблице строк интерфейса.** Все фразы, включая
-строку статуса синхронизации, лежат в `apps/web/ui/locales-ru.js` и `locales-en.js`;
-`apps/web/ui/i18n.js` — только механика (`t`, `applyTranslations`, `setLocale`) и ни одного
+строку статуса синхронизации, лежат в `web/web/ui/locales-ru.js` и `locales-en.js`;
+`web/web/ui/i18n.js` — только механика (`t`, `applyTranslations`, `setLocale`) и ни одного
 слова конкретного языка. Rust-слой портала больше не собирает предложений: модуль отдаёт
 **код и данные** — ключ `sync-*` и числа (`last_sync.key`, `.received`, `.sent`,
 `.conflicts`, `.head_rejected`), — а слова подставляет страница, которая одна знает, какой
@@ -404,7 +407,7 @@ Kit: там переходов нет по построению, поэтому 
 **Язык интерфейса переключается селектом** в шапке; по умолчанию русский, английский — по
 выбору, и выбор лежит в `localStorage` под ключом `cloudpass.language` (переживает
 перезапуск приложения). Тексты устроены так же, как в портале: фразы лежат в
-`apps/desktop/ui/locales-ru.js` и `locales-en.js`, `apps/desktop/ui/i18n.js` — только
+`desktop/ui/locales-ru.js` и `locales-en.js`, `desktop/ui/i18n.js` — только
 механика. Rust-команды отдают ключ и данные вместо предложений: `VaultStatus.last_sync` —
 это `{ key, received, sent, conflicts, head_rejected, error_detail }`, а `CommandError` — это
 `{ key, detail }`. `detail` и `error_detail` **не рендерятся никогда**: это английская проза
@@ -515,7 +518,7 @@ Kit: там переходов нет по построению, поэтому 
 - **Не подключать внешние источники — включая шрифты.** CSP портала начинается с
   `default-src 'none'`, и это не формальность: страница, которая грузит шрифт с чужого
   домена, отдаёт этому домену IP и поведение каждого пользователя. Поэтому Montserrat лежит
-  в `apps/web/ui/fonts/`, а `font-src 'self'` разрешает ровно его и ничего больше.
+  в `web/web/ui/fonts/`, а `font-src 'self'` разрешает ровно его и ничего больше.
 - **Не менять формат `Envelope` или канонический вид AAD** без версии протокола: старые
   данные перестанут расшифровываться.
 - **Не включать внутренний `Ksf` у OPAQUE и не понижать параметры Argon2id.** Argon2id
