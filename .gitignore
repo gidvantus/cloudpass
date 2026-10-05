@@ -3,7 +3,18 @@
 **/target
 
 # Tauri generates permission schemas on every build; they are derived, not source.
-desktop/gen/
+desktop/gen/schemas/
+
+# The Android project under desktop/gen/android is source: the manifest, the icons and the
+# Gradle files are edited by hand and would be lost on the next `android init`. Only the
+# build output and the machine-local paths go to the ignore list.
+desktop/gen/android/.gradle/
+desktop/gen/android/.kotlin/
+desktop/gen/android/build/
+desktop/gen/android/app/build/
+desktop/gen/android/local.properties
+*.jks
+*.keystore
 
 # The web portal's wasm module and its JavaScript glue. Derived, and large: run
 # `scripts/build-web.ps1` after a fresh checkout, or the server has nothing to serve.

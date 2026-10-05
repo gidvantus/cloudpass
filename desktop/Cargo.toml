@@ -7,10 +7,11 @@ rust-version.workspace = true
 license.workspace = true
 
 # Compiled as a library so the same entry point can later be used on mobile, where the
-# platform loads a library instead of running a binary.
+# platform loads a library instead of running a binary. Android loads a shared library
+# (`cdylib`) and links against a static one (`staticlib`); Windows uses the `rlib`.
 [lib]
 name = "cloudpass_desktop_lib"
-crate-type = ["rlib"]
+crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
