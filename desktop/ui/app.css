@@ -335,10 +335,22 @@ button:focus-visible {
 
 /* The update notice: the same shape as the banner, outlined rather than filled. It says
    something good — a newer version exists — and it is not an error, so it must not use the
-   colour that means "something went wrong". It never covers the banner or the Kit panel:
-   all three are ordinary blocks in the shell and the page pushes them down in turn. */
+   colour that means "something went wrong".
+ *
+ * It is placed on the right, under the status line the reader has just looked at, and it
+ * takes only the width it needs: a notice about a version is a sentence and two buttons,
+ * not a band across the screen. `max-width` rather than `width` keeps it from stretching on
+ * a window wide enough to waste, and `min(100%, …)` keeps it inside the column when the
+ * window is not. It stays in the flow, so it never covers the banner or the Kit panel; the
+ * row that carries it has no height whenever the notice is hidden. */
+.update-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .update {
-  margin: 18px 0 0;
+  max-width: min(100%, 420px);
+  margin: 0 0 18px;
   padding: 14px 20px;
   border: 1px solid var(--fg);
   font-size: 0.875rem;
