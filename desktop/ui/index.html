@@ -39,40 +39,6 @@
 
       <p class="banner" id="banner" hidden></p>
 
-      <!-- A newer build exists. It is a band of its own, on the right: the notice follows the
-           header rather than the page, so it sits under the text the eye has just read
-           instead of pushing the screen a person is working on down. It stays in the flow —
-           the row below is empty while the header is, so nothing is covered. On a narrow
-           window the row is the whole width, because there is no right half left to spare.
-           The button is named "download" after what the person is trying to do; what it
-           actually does is copy the portal's address, because opening a browser or
-           launching an installer is not among this window's permissions and deliberately
-           never will be. -->
-      <div class="update-row" id="update-row">
-        <section class="update" id="update-notice" data-testid="update-notice" hidden>
-          <p class="update-text" id="update-text" data-testid="update-text"></p>
-          <div class="row-actions">
-            <button
-              type="button"
-              id="update-download"
-              data-testid="update-download"
-              data-i18n="update-download"
-            >
-              Скопировать адрес портала
-            </button>
-            <button
-              type="button"
-              class="secondary"
-              id="update-dismiss"
-              data-testid="update-dismiss"
-              data-i18n="update-dismiss"
-            >
-              Скрыть
-            </button>
-          </div>
-        </section>
-      </div>
-
       <!-- Sign in. First gate for a machine that has no local account yet ------ -->
       <section class="panel panel-split" id="join-panel" data-testid="join-panel" hidden>
         <div class="panel-main">
@@ -416,6 +382,42 @@
           </div>
         </form>
       </section>
+
+      <!-- The application footer, with a newer build's notice at its right edge ------------
+           The notice is news about this window rather than about the vault, so it belongs to
+           the application and not inside a screen: it sits in the footer, at the right, where
+           a reader who is finished with the panel above will pass it. It is the last band of
+           the column and the column is at least a window tall, so the footer falls to the
+           bottom of a short screen instead of floating under the text; while there is nothing
+           to say the whole band is hidden, so no empty rule is left hanging under a screen.
+           The button is named "download" after what the person is trying to do; what it
+           actually does is copy the portal's address, because opening a browser or launching
+           an installer is not among this window's permissions and deliberately never will
+           be. -->
+      <footer class="footer" id="app-footer" hidden>
+        <section class="update" id="update-notice" data-testid="update-notice">
+          <p class="update-text" id="update-text" data-testid="update-text"></p>
+          <div class="row-actions">
+            <button
+              type="button"
+              id="update-download"
+              data-testid="update-download"
+              data-i18n="update-download"
+            >
+              Скопировать адрес портала
+            </button>
+            <button
+              type="button"
+              class="secondary"
+              id="update-dismiss"
+              data-testid="update-dismiss"
+              data-i18n="update-dismiss"
+            >
+              Скрыть
+            </button>
+          </div>
+        </section>
+      </footer>
     </main>
     <!-- A module, like the portal's: the tables are ES modules beside it, and the CSP already
          allows scripts from this origin only. -->

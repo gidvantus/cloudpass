@@ -113,6 +113,7 @@ const emptyHint = byId('empty-hint');
 const syncNote = byId('sync-note');
 const updateNotice = byId('update-notice');
 const updateText = byId('update-text');
+const updateFooter = byId('app-footer');
 
 /** The last status the vault reported, kept so a language switch does not need another call. */
 let lastStatus = null;
@@ -402,6 +403,18 @@ function renderUpdate(status) {
 }
 
 /**
+ * Shows the notice, or takes it away — and the footer with it.
+ *
+ * The notice lives in the application footer, which is a band separated from the panel above
+ * by a hairline; a band kept around for a notice that is not there would leave that rule
+ * hanging under a screen that has nothing to say about versions.
+ */
+function setUpdateVisible(visible) {
+  updateNotice.hidden = !visible;
+  updateFooter.hidden = !visible;
+}
+
+/**
  * Draws the notice, or takes it away.
  *
  * Two gates, and both have to open: the Rust side has already decided that the server
@@ -411,7 +424,7 @@ function renderUpdate(status) {
  * state and not from the markup.
  */
 function drawUpdate() {
-  updateNotice.hidden = true;
+  setUpdateVisible(false);
 
   const status = lastUpdate;
   if (!status || !status.available || !status.latest) {
@@ -427,7 +440,7 @@ function drawUpdate() {
     latest: status.latest,
     current: status.current,
   });
-  updateNotice.hidden = false;
+  setUpdateVisible(true);
 }
 
 /** Asks the Rust side for its cached answer. Never a request; the cache is what it is. */
