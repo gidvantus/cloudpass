@@ -13,14 +13,6 @@ license.workspace = true
 name = "cloudpass_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
-[features]
-# Tauri compiles itself in "dev" mode unless this feature is on: the asset protocol then
-# proxies every request to a frontend dev server instead of serving the files embedded in
-# the binary. On desktop that is invisible while `devUrl` is unset, but on Android there is
-# no dev server and no way to reach one, so the app comes up to an error page instead of its
-# own UI. Enable this for any build that ships.
-custom-protocol = ["tauri/custom-protocol"]
-
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
