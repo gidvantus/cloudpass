@@ -36,7 +36,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const APPS = [
   {
     name: 'web portal',
-    dir: 'apps/web/ui',
+    dir: 'web/web/ui',
     html: 'index.html',
     tables: { ru: 'locales-ru.js', en: 'locales-en.js' },
     identicalOnPurpose: {
@@ -46,7 +46,7 @@ const APPS = [
   },
   {
     name: 'desktop client',
-    dir: 'apps/desktop/ui',
+    dir: 'desktop/ui',
     html: 'index.html',
     tables: { ru: 'locales-ru.js', en: 'locales-en.js' },
     identicalOnPurpose: {

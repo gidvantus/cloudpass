@@ -1,7 +1,7 @@
 // End-to-end smoke test for the shipped web portal.
 //
 // This drives the *actual* artifact the server hands to a browser — the generated
-// `apps/web/ui/pkg/cloudpass_web.js` and its wasm — against a *real* running server. It
+// `web/web/ui/pkg/cloudpass_web.js` and its wasm — against a *real* running server. It
 // is the only check that covers the parts a Rust test cannot reach: the wasm-bindgen glue,
 // the module's exported ABI, and the `fetch` transport.
 //
@@ -30,7 +30,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 // would happily glue it onto the working directory and produce a path that cannot exist.
 const pkg = process.argv[3]
   ? resolve(process.argv[3])
-  : join(here, '..', 'apps', 'web', 'ui', 'pkg');
+  : join(here, '..', 'web', 'web', 'ui', 'pkg');
 
 // `web_sys::window()` looks for a global `window`; in Node the global object is it.
 globalThis.window = globalThis;

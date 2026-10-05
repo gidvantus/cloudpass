@@ -1,6 +1,6 @@
 Keeps this directory in version control.
 
 `scripts/build-desktop.ps1` puts the built installer here, and the server hands out whatever it
-finds — see `crates/cloudpass-server/src/downloads.rs`. The contents are ignored by git and by
+finds — see `web/server/src/downloads.rs`. The contents are ignored by git and by
 nothing else: an empty directory is a server that has nothing to offer, which the portal reports
 by showing no download at all.

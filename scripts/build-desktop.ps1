@@ -1,13 +1,17 @@
 # Builds the desktop application and puts the result where the server hands it out.
 #
 #   .\scripts\build-desktop.ps1
-#   → apps/web/ui/download/CloudPass_<version>_x64-setup.exe
+#   → web/web/ui/download/CloudPass_<version>_x64-setup.exe
 #
 # Why the artifact lands inside the web root: the server already serves that directory, and
 # `downloads.rs` looks for a build next to the portal. One convention means there is nothing to
 # configure and no list of file names to keep in step — whatever build script runs last is what
 # the landing page offers, and the server hashes it at startup so the published SHA-256 cannot
 # go stale.
+#
+# Run from the repository root, as the usage above says. The Tauri CLI is the one step that
+# does not run there: it reads `tauri.conf.json` from the current directory, and with the
+# application now in `desktop/` the build is started from that directory instead.
 #
 # The bundler needs the network the first time: it downloads the Tauri CLI (through npx) and
 # NSIS. After that both are cached.
@@ -17,7 +21,7 @@
 # has nothing to do with whether the build worked. Success is decided by `$LASTEXITCODE`.
 
 param(
-    [string]$OutputDirectory = 'apps/web/ui/download'
+    [string]$OutputDirectory = 'web/web/ui/download'
 )
 
 $root = Split-Path -Parent $PSScriptRoot
@@ -29,8 +33,14 @@ Set-Location $root
 . (Join-Path $PSScriptRoot 'env.ps1')
 
 Write-Host 'Building the desktop application (release, NSIS bundle)...'
-npx --yes '@tauri-apps/cli@2' build
-if ($LASTEXITCODE -ne 0) { throw "the Tauri build failed with $LASTEXITCODE" }
+Push-Location (Join-Path $root 'desktop')
+try {
+    npx --yes '@tauri-apps/cli@2' build
+    $tauriExit = $LASTEXITCODE
+} finally {
+    Pop-Location
+}
+if ($tauriExit -ne 0) { throw "the Tauri build failed with $tauriExit" }
 
 # The installer is preferred: it registers an uninstaller and a shortcut, which is what a person
 # expects from something they downloaded. The bare executable is the fallback for a build made

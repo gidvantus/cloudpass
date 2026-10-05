@@ -3,17 +3,17 @@
 **/target
 
 # Tauri generates permission schemas on every build; they are derived, not source.
-apps/desktop/gen/
+desktop/gen/
 
 # The web portal's wasm module and its JavaScript glue. Derived, and large: run
 # `scripts/build-web.ps1` after a fresh checkout, or the server has nothing to serve.
-apps/web/ui/pkg/
+web/web/ui/pkg/
 
 # The desktop installer, put here by `scripts/build-desktop.ps1` for the server to hand out.
 # The file is ignored; the directory is kept, because the Docker build copies it and an empty
 # directory means "nothing to offer" rather than a failure.
-apps/web/ui/download/*
-!apps/web/ui/download/.gitkeep
+web/web/ui/download/*
+!web/web/ui/download/.gitkeep
 
 # Vendored toolchain bootstrap (rustup-init.exe and friends)
 /.tools

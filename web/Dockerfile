@@ -99,13 +99,13 @@ COPY --from=builder /out/cloudpass-server /usr/local/bin/cloudpass-server
 # and the translation machinery are imported by `app.js` at the moment the page loads, so a
 # list of files that misses them is not a portal without English: it is a portal that does not
 # start at all.
-COPY apps/web/ui/index.html apps/web/ui/app.js apps/web/ui/app.css apps/web/ui/favicon.svg /app/ui/
-COPY apps/web/ui/i18n.js apps/web/ui/locales-ru.js apps/web/ui/locales-en.js /app/ui/
-COPY apps/web/ui/fonts /app/ui/fonts
+COPY web/web/ui/index.html web/web/ui/app.js web/web/ui/app.css web/web/ui/favicon.svg /app/ui/
+COPY web/web/ui/i18n.js web/web/ui/locales-ru.js web/web/ui/locales-en.js /app/ui/
+COPY web/web/ui/fonts /app/ui/fonts
 # The desktop installer, if one has been built. The directory always exists — it holds a
 # `.gitkeep` — so this COPY never fails; when it is empty the server reports that it has no
 # build to offer and the landing page shows no download at all.
-COPY apps/web/ui/download /app/ui/download
+COPY web/web/ui/download /app/ui/download
 COPY --from=builder /out/pkg /app/ui/pkg/
 
 # The database lives outside the image, on a volume. The directory is created and handed to

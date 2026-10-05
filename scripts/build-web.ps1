@@ -2,7 +2,7 @@
 #
 # Run from the repository root:  .\scripts\build-web.ps1  [-Debug]
 #
-# The output lands in apps/web/ui/pkg/, which is what the server serves. It is generated,
+# The output lands in web/web/ui/pkg/, which is what the server serves. It is generated,
 # not source: `cargo build` alone does not produce it, and a checkout without running this
 # will serve a portal whose module is missing.
 #
@@ -37,8 +37,8 @@ if (-not (Test-Path $wasm)) { throw "no wasm at $wasm" }
 # page imports the module directly and the browser fetches the wasm beside it.
 # `--no-typescript` keeps the output to the two files the page actually uses.
 Write-Host 'Running wasm-bindgen...'
-wasm-bindgen --target web --out-dir "$root/apps/web/ui/pkg" --no-typescript $wasm
+wasm-bindgen --target web --out-dir "$root/web/web/ui/pkg" --no-typescript $wasm
 if ($LASTEXITCODE -ne 0) { throw "wasm-bindgen failed with $LASTEXITCODE" }
 
-Get-ChildItem "$root/apps/web/ui/pkg" | Format-Table Name, Length
+Get-ChildItem "$root/web/web/ui/pkg" | Format-Table Name, Length
 Write-Host 'Done.'
