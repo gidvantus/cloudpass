@@ -92,6 +92,7 @@ function renderDynamic() {
   renderBanner();
   drawStatus();
   drawItems();
+  drawUpdate();
 }
 
 const panels = {
@@ -110,6 +111,9 @@ const statusLine = byId('status');
 const itemList = byId('item-list');
 const emptyHint = byId('empty-hint');
 const syncNote = byId('sync-note');
+const updateNotice = byId('update-notice');
+const updateText = byId('update-text');
+const updateFooter = byId('app-footer');
 
 /** The last status the vault reported, kept so a language switch does not need another call. */
 let lastStatus = null;
@@ -330,6 +334,153 @@ async function copyPassword(id, button) {
     flash(button, 'vault-copied');
   } catch (error) {
     complain(describe(error));
+  }
+}
+
+// --- a newer version of this application ------------------------------------
+
+/**
+ * Where the version the reader hid is remembered.
+ *
+ * The second thing this client ever writes to `localStorage`, and for the same reason as
+ * the first: it is about the reader, not about the vault, and it has to survive a restart
+ * or "hide" would mean "hide until you close the window".
+ */
+const UPDATE_DISMISSED_KEY = 'cloudpass.update.dismissed';
+
+/**
+ * How often the cached answer is read again.
+ *
+ * Five minutes against the Rust side's six hours: this is a repaint, not a request, and it
+ * exists so that a notice which appeared while the window was open is not sat on until the
+ * next start.
+ */
+const UPDATE_REFRESH_MS = 5 * 60 * 1000;
+
+/** The last answer `update_status` gave, kept so a language switch needs no second call. */
+let lastUpdate = null;
+
+/** The version the reader hid, or `null` when there is none or it cannot be read. */
+function storedDismissed() {
+  try {
+    return window.localStorage.getItem(UPDATE_DISMISSED_KEY);
+  } catch {
+    // A web view that refuses `localStorage` cannot remember a dismissal, so the notice
+    // comes back on the next start. That is a smaller failure than a panel that will not
+    // draw, and it is the same trade the language choice makes.
+    return null;
+  }
+}
+
+/**
+ * Whether `candidate` is a later version than `reference`, both as `1.2.3` strings.
+ *
+ * A plain comparison of the dotted fields rather than a semver implementation: the only
+ * versions this ever sees are ones the Rust side has already parsed as semantic versions,
+ * and the only question here is whether the reader hid exactly this one or something
+ * newer. Anything that is not a number in either place answers "not newer", which hides
+ * the notice rather than showing it for something unrecognised.
+ */
+function isNewer(candidate, reference) {
+  const left = String(candidate).split('.');
+  const right = String(reference).split('.');
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const a = Number.parseInt(left[index] ?? '0', 10);
+    const b = Number.parseInt(right[index] ?? '0', 10);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) {
+      return false;
+    }
+    if (a !== b) {
+      return a > b;
+    }
+  }
+  return false;
+}
+
+function renderUpdate(status) {
+  lastUpdate = status;
+  drawUpdate();
+}
+
+/**
+ * Shows the notice, or takes it away — and the footer with it.
+ *
+ * The notice lives in the application footer, which is a band separated from the panel above
+ * by a hairline; a band kept around for a notice that is not there would leave that rule
+ * hanging under a screen that has nothing to say about versions.
+ */
+function setUpdateVisible(visible) {
+  updateNotice.hidden = !visible;
+  updateFooter.hidden = !visible;
+}
+
+/**
+ * Draws the notice, or takes it away.
+ *
+ * Two gates, and both have to open: the Rust side has already decided that the server
+ * offers a version above this build, and the reader has not hidden that version or a later
+ * one. The wording is composed here rather than in Rust because the language belongs to
+ * this side — and it is recomposed on a language switch, which is why the text is set from
+ * state and not from the markup.
+ */
+function drawUpdate() {
+  setUpdateVisible(false);
+
+  const status = lastUpdate;
+  if (!status || !status.available || !status.latest) {
+    return;
+  }
+
+  const dismissed = storedDismissed();
+  if (dismissed && !isNewer(status.latest, dismissed)) {
+    return;
+  }
+
+  updateText.textContent = t('update-available', {
+    latest: status.latest,
+    current: status.current,
+  });
+  setUpdateVisible(true);
+}
+
+/** Asks the Rust side for its cached answer. Never a request; the cache is what it is. */
+async function refreshUpdate() {
+  try {
+    renderUpdate(await invoke('update_status'));
+  } catch {
+    // Reading the cache cannot fail in a way the reader needs to hear about, and a notice
+    // about the application is not worth a banner about the notice. The screen simply says
+    // nothing, which is also what it says when there is no update.
+    lastUpdate = null;
+    drawUpdate();
+  }
+}
+
+/**
+ * Puts the portal's address on the clipboard.
+ *
+ * The same write the password copy ends in — `navigator.clipboard.writeText`, with a
+ * missing clipboard and a refused one reported through the very same two keys — minus the
+ * part of that path which exists to keep a secret out of this page. An address is not a
+ * secret, and nothing is opened and nothing is launched: the reader pastes it wherever
+ * they like, which is the only way this window is willing to hand over a program.
+ */
+async function copyAddress(url, button) {
+  if (!url) {
+    return;
+  }
+
+  const clipboard = navigator.clipboard;
+  if (!clipboard || typeof clipboard.writeText !== 'function') {
+    complain({ key: 'err-clipboard-insecure-origin' });
+    return;
+  }
+
+  try {
+    await clipboard.writeText(url);
+    flash(button, 'update-copied');
+  } catch {
+    complain({ key: 'err-clipboard-denied' });
   }
 }
 
@@ -742,9 +893,46 @@ byId('editor-delete').addEventListener('click', async () => {
   }
 });
 
+byId('update-download').addEventListener('click', async () => {
+  clearComplaint();
+  const button = byId('update-download');
+
+  try {
+    // The one place a person asks the question by hand, so it asks the server rather than
+    // the cache. The address it answers with is all this window can do with it.
+    const status = await withBusy(button, () => invoke('check_for_update'));
+    renderUpdate(status);
+    await copyAddress(status.url, button);
+  } catch (error) {
+    complain(describe(error));
+    // A failed check is still an answer about the notice: whatever the server said, the
+    // Rust side has already written it into the cache.
+    await refreshUpdate();
+  }
+});
+
+byId('update-dismiss').addEventListener('click', () => {
+  const version = lastUpdate && lastUpdate.latest;
+  if (version) {
+    try {
+      window.localStorage.setItem(UPDATE_DISMISSED_KEY, version);
+    } catch {
+      // See `storedDismissed`: a dismissal that cannot be stored is a notice that comes
+      // back on the next start, not a broken window.
+    }
+  }
+  drawUpdate();
+});
+
 // Before the first panel is up: the stored language is put on the page, so a reader who chose
 // English does not get a screen of Russian first. The markup is the Russian default, which is
 // also the fallback for a stored value that is neither language.
 applyLocale(storedLocale());
 
 refresh().catch((error) => complain(describe(error)));
+
+// The first update check has already run in Rust by the time this line executes, so this
+// usually draws a notice that was waiting. The timer is a repaint of the cache; the asking
+// belongs to the background task, which knows the period.
+refreshUpdate();
+window.setInterval(refreshUpdate, UPDATE_REFRESH_MS);

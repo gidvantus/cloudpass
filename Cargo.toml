@@ -27,6 +27,11 @@ serde_json = "1"
 uuid = { version = "1", features = ["serde"] }
 thiserror = "1"
 hex = "0.4"
+# Published desktop build versions: the server parses one out of an installer's file
+# name, and the desktop client compares it with the version it was built as. Both sides
+# must agree on what "1.2.3" means, which is the whole reason this is a crate and not a
+# hand-rolled split on dots.
+semver = "1"
 opaque-ke = { version = "4.0", features = ["ristretto255"] }
 
 # Device identity and vault-head signatures. Already in the dependency tree through
@@ -39,7 +44,16 @@ ed25519-dalek = "2"
 # `raw_sql` instead, which keeps the dependency tree small — a supply-chain win, and
 # this project treats that as a security property, not a nicety.
 axum = "0.8"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
+# `time` is declared here rather than left to be switched on by whichever dependency
+# happens to need it: the desktop's update check sleeps between polls, and a feature that
+# exists only by accident of feature unification is a feature that disappears the day the
+# dependency graph changes.
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "macros",
+    "net",
+    "time",
+] }
 sqlx = { version = "0.8", default-features = false, features = [
     "runtime-tokio",
     "sqlite",

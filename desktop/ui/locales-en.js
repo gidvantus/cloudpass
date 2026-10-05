@@ -140,6 +140,15 @@ export default {
   'sync-password-changed': 'master password changed',
   'sync-not-connected': 'not connected to {url}',
 
+  // `update-*` speaks about this application rather than the vault: a newer build is on
+  // the server, and the only thing this window may do about it is hand the person the
+  // address. `update-available` and `update-copied` are chosen from data at run time, so
+  // they are never written in the markup.
+  'update-available': 'Version {latest} is available — you have {current}.',
+  'update-download': 'Copy the portal address',
+  'update-copied': 'Address copied',
+  'update-dismiss': 'Dismiss',
+
   'err-passwords-mismatch': 'The two passwords do not match.',
   'err-passwords-mismatch-new': 'The two new passwords do not match.',
   'err-password-short':
@@ -170,5 +179,7 @@ export default {
   'err-clipboard-insecure-origin':
     'The application window does not offer a clipboard.',
   'err-clipboard-denied': 'The application refused access to the clipboard.',
+  'err-update-check-failed':
+    'Could not check for updates. Check that the server is running and try again.',
   'err-unknown': 'The operation failed.',
 };

@@ -35,15 +35,19 @@ use serde::Serialize;
 use tauri::{Manager, State};
 
 use cloudpass_client::recovery_code;
-use cloudpass_client::sync::{pending_changes, provision, SyncAccount, SyncEngine, SyncOutcome};
+use cloudpass_client::sync::{
+    pending_changes, provision, HttpRequest, SyncAccount, SyncEngine, SyncOutcome, Transport,
+};
 use cloudpass_client::{ClientError, ItemDraft, MemoryStore, Store, StoredAccount, Vault};
 use cloudpass_core::device::DeviceSigningKey;
 use cloudpass_core::params::KdfParams;
+use semver::Version;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::state::{AppState, SharedState};
 use crate::transport::HttpTransport;
+use crate::update;
 
 /// What the frontend is told when something goes wrong.
 ///
@@ -109,6 +113,25 @@ type CommandResult<T> = Result<T, CommandError>;
 /// rejected command.
 const CLIPBOARD_INSECURE_ORIGIN: &str = "clipboard-insecure-origin";
 const CLIPBOARD_DENIED: &str = "clipboard-denied";
+
+/// The one endpoint the update check reads. Public by nature: no token, no vault.
+const META_PATH: &str = "/api/v1/meta";
+
+/// How long the update check waits for an answer before giving up.
+///
+/// Short, because nobody is standing in front of this request. The vault opens, lists and
+/// saves without a server at all, and a check that hung on one would be a background task
+/// holding the state lock for as long as the server felt like taking.
+const UPDATE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// How long between checks when nothing says otherwise.
+const UPDATE_PERIOD: std::time::Duration = std::time::Duration::from_secs(6 * 60 * 60);
+
+/// The floor `CLOUDPASS_UPDATE_INTERVAL_SECONDS` is held to.
+///
+/// The variable exists so that the feature can be watched while it is being built, and a
+/// typo in it must not turn into a request a second against a server in somebody's flat.
+const UPDATE_PERIOD_FLOOR_SECONDS: u64 = 60;
 
 /// What the last synchronization did, as a key and the numbers that go with it.
 ///
@@ -961,6 +984,170 @@ fn parse_id(value: &str) -> CommandResult<Uuid> {
     Uuid::parse_str(value).map_err(|_| CommandError::of_key("bad_id"))
 }
 
+// --- a newer build of this application --------------------------------------
+
+/// What the interface needs in order to draw, or not draw, the update notice.
+///
+/// The versions are strings because that is what both sides of the comparison are: one
+/// comes from the crate metadata, the other from the server's file name, and neither is
+/// interesting to the page as anything but a number to show. `url` is where a person
+/// fetches the build — the portal itself, because this application has no business
+/// downloading or launching an installer.
+#[derive(Debug, Clone, Serialize)]
+pub struct UpdateStatus {
+    pub available: bool,
+    pub latest: Option<String>,
+    pub current: String,
+    pub url: String,
+}
+
+/// The question the interface asks: is there a newer version, and where would I get it?
+///
+/// Answered from the cache and nothing else. This is called when the window opens and on a
+/// timer after that, and a command on a timer must not be a request on a timer: the
+/// background task decides when to ask the server, and this only reports what it heard.
+#[tauri::command]
+pub async fn update_status(
+    app: tauri::AppHandle,
+    state: State<'_, SharedState>,
+) -> CommandResult<UpdateStatus> {
+    let state = state.lock().await;
+    Ok(update_status_of(&state, &current_version(&app)))
+}
+
+/// Asks the server *right now*, caches the answer, and reports it.
+///
+/// The one place a person can ask the question by hand. A failure is reported rather than
+/// swallowed — an explicit check that silently did nothing would be a button that does not
+/// work — while the background task, which has nobody to tell, keeps its failures to
+/// itself.
+#[tauri::command]
+pub async fn check_for_update(
+    app: tauri::AppHandle,
+    state: State<'_, SharedState>,
+) -> CommandResult<UpdateStatus> {
+    let mut state = state.lock().await;
+    let current = current_version(&app);
+    refresh_update(&mut state, &current).await?;
+    Ok(update_status_of(&state, &current))
+}
+
+/// The version this binary was built as, as `tauri.conf.json` and the crate declare it.
+///
+/// `tests/update_version.rs` is what holds those two together; this is the one place the
+/// running application reads the value.
+fn current_version(app: &tauri::AppHandle) -> Version {
+    app.package_info().version.clone()
+}
+
+fn update_status_of(state: &AppState, current: &Version) -> UpdateStatus {
+    UpdateStatus {
+        available: state.update.latest.is_some(),
+        latest: state.update.latest.clone(),
+        current: current.to_string(),
+        url: state.server_url.clone(),
+    }
+}
+
+/// Asks the server what desktop build it offers and writes the answer into the cache.
+///
+/// # What counts as an answer
+///
+/// Anything that is not a newer, readable version is "nothing to announce", including
+/// every way this can fail: no server, a refused connection, a status that is not success,
+/// and a body that cannot be read. The cache is *replaced* on each attempt rather than
+/// merged — a server that has gone away is a server that is not offering anything, and
+/// leaving last hour's notice on screen would be a claim this application cannot support.
+async fn refresh_update(state: &mut AppState, current: &Version) -> CommandResult<()> {
+    let offered = match ask_server(state).await {
+        Ok(offered) => offered,
+        Err(error) => {
+            state.update.latest = None;
+            return Err(error);
+        }
+    };
+
+    let previous = state.update.latest.take();
+    state.update.latest =
+        update::should_notify(current, offered.as_deref(), None).map(|version| version.to_string());
+
+    // The transition worth recording: something to tell the user about appeared, or changed
+    // to something else. Only the versions are written — an address, a status code or an
+    // error sentence has no business in a log that exists to say which build is on offer.
+    if state.update.latest.is_some() && state.update.latest != previous {
+        if let Some(latest) = &state.update.latest {
+            tracing::info!(
+                latest = %latest,
+                current = %current,
+                "a newer desktop build is available"
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// One request, with every failure already reduced to "the server offered nothing".
+///
+/// The error returned is the one the explicit check shows; the background task ignores it,
+/// and nothing here ever reaches the cache as anything but `None`.
+async fn ask_server(state: &AppState) -> CommandResult<Option<String>> {
+    let transport = HttpTransport::with_timeout(&state.server_url, UPDATE_TIMEOUT)?;
+    let response = transport.send(HttpRequest::get(META_PATH, None)).await?;
+
+    if !response.is_success() {
+        return Err(CommandError::of_key("update_check_failed"));
+    }
+
+    Ok(update::offered_version(&response.body))
+}
+
+/// Checks for a newer build now, and then every six hours until the application exits.
+///
+/// The first check runs immediately: the window is up within a second of start, and a
+/// notice that was waiting for the user is worth more than one that appears while they are
+/// reading something else.
+///
+/// Failures are swallowed here on purpose. This task has no user to tell, and the command
+/// that does have one reports failures itself; anything that reached the screen from here
+/// would be an error message about a background errand, which is exactly the sort of thing
+/// a password manager must not interrupt someone with.
+pub async fn poll_updates(app: tauri::AppHandle, state: SharedState) {
+    loop {
+        let current = app.package_info().version.clone();
+        {
+            let mut guard = state.lock().await;
+            if refresh_update(&mut guard, &current).await.is_err() {
+                tracing::debug!("the update check did not complete; treating it as no update");
+            }
+        }
+
+        tokio::time::sleep(update_period()).await;
+    }
+}
+
+/// How long to wait between checks, from `CLOUDPASS_UPDATE_INTERVAL_SECONDS`.
+fn update_period() -> std::time::Duration {
+    update_period_from(
+        std::env::var("CLOUDPASS_UPDATE_INTERVAL_SECONDS")
+            .ok()
+            .as_deref(),
+    )
+}
+
+/// The rule itself, as a function of the configured text.
+///
+/// A value that is missing, unreadable or below the floor becomes the floor. The variable
+/// exists so that the feature can be watched while it is being built, and a typo in it must
+/// not turn into a request a second against a server in somebody's flat.
+fn update_period_from(configured: Option<&str>) -> std::time::Duration {
+    let seconds = configured
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(UPDATE_PERIOD.as_secs());
+
+    std::time::Duration::from_secs(seconds.max(UPDATE_PERIOD_FLOOR_SECONDS))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -989,5 +1176,24 @@ mod tests {
         );
         assert!(script.contains("err-clipboard-insecure-origin"));
         assert!(script.contains("err-clipboard-denied"));
+    }
+
+    /// The one knob on the update check, held to what it promises. Every case ends in a
+    /// period the application is willing to poll at, because a background task that wakes a
+    /// hundred times a second is a bug that only shows up on somebody else's machine.
+    #[test]
+    fn the_update_period_has_a_floor_and_a_default() {
+        use std::time::Duration;
+
+        assert_eq!(update_period_from(Some("1")), Duration::from_secs(60));
+        assert_eq!(update_period_from(Some("59")), Duration::from_secs(60));
+        assert_eq!(update_period_from(Some("60")), Duration::from_secs(60));
+        assert_eq!(update_period_from(Some("90")), Duration::from_secs(90));
+
+        // Nothing readable is the default rather than a panic or a burst of requests.
+        assert_eq!(update_period_from(None), UPDATE_PERIOD);
+        assert_eq!(update_period_from(Some("")), UPDATE_PERIOD);
+        assert_eq!(update_period_from(Some("soon")), UPDATE_PERIOD);
+        assert_eq!(update_period_from(Some("-5")), UPDATE_PERIOD);
     }
 }

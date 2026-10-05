@@ -73,13 +73,14 @@ body {
 
 /* --- the column ------------------------------------------------------------ */
 
-/* One column of bands, each separated from the next by a single hairline: the masthead and
-   the visible panel. The panel is a stripe in that column, not a card floating on a
-   background. */
+/* One column of bands, each separated from the next by a single hairline: the masthead, the
+   visible panel and the footer. The panel is a stripe in that column, not a card floating on
+   a background. `min-height` is what lets the footer act as one — see `.footer`. */
 .shell {
   display: flex;
   flex-direction: column;
   width: 100%;
+  min-height: 100vh;
   max-width: var(--maxw);
   margin: 0 auto;
   padding-inline: var(--gutter);
@@ -331,6 +332,46 @@ button:focus-visible {
   font-size: 0.875rem;
   font-weight: 500;
   line-height: 1.5;
+}
+
+/* The application footer: the last band of the column, and the only one that belongs to the
+   application rather than to a screen. It carries the update notice at its right edge.
+   `margin-top: auto` is what makes it a footer — the shell is one column at least a window
+   tall, so on a short screen the band falls to the bottom of the window and on a long one it
+   follows the content, and either way it is separated from the panel above by the same
+   hairline every other band uses. The band is hidden outright while it has nothing to say,
+   so an empty rule never hangs under a working screen. */
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: auto;
+  padding-block: 26px 34px;
+  border-top: 1px solid var(--line);
+}
+
+/* The update notice: the same shape as the banner, outlined rather than filled. It says
+   something good — a newer version exists — and it is not an error, so it must not use the
+   colour that means "something went wrong".
+ *
+ * It takes only the width it needs: a notice about a version is a sentence and two buttons,
+ * not a band across the screen. `max-width` rather than `width` keeps it from stretching on
+ * a window wide enough to waste, and `min(100%, …)` keeps it inside the column when the
+ * window is not. The footer aligns it to the right. */
+.update {
+  max-width: min(100%, 420px);
+  margin: 0;
+  padding: 14px 20px;
+  border: 1px solid var(--fg);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.update-text {
+  margin: 0 0 12px;
+}
+
+.update .row-actions {
+  margin: 0;
 }
 
 /* --- layout helpers -------------------------------------------------------- */
