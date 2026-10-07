@@ -325,10 +325,36 @@
           </div>
         </div>
         <p class="hint" id="sync-note"></p>
-        <ul class="item-list" id="item-list"></ul>
-        <p class="hint" id="empty-hint" hidden data-i18n="vault-empty">
-          Записей пока нет. Нажмите «Добавить».
-        </p>
+
+        <!-- The cabinet: two columns, projects on the left choosing what the list on the
+             right is showing. The same shape as the portal's, because it is the same idea —
+             a flat list stops being readable long before it stops being correct. -->
+        <div class="cabinet">
+          <div class="cabinet-projects" data-testid="vault-projects-column">
+            <h2 data-i18n="vault-projects">Проекты</h2>
+            <ul class="projects" id="project-list" data-testid="project-list"></ul>
+            <p
+              class="hint"
+              id="project-empty"
+              data-testid="project-empty"
+              data-i18n="vault-projects-empty"
+              hidden
+            >
+              Проектов пока нет. Назовите проект в записи — он появится здесь.
+            </p>
+          </div>
+
+          <div class="cabinet-items" data-testid="vault-items-column">
+            <!-- The heading is the scope line: it says what the list below is showing. Its
+                 text comes from `drawItems()` alone — a key here would freeze it in the
+                 language the markup was written in. -->
+            <h2 id="item-scope" data-testid="item-scope"></h2>
+            <ul class="item-list" id="item-list"></ul>
+            <p class="hint" id="empty-hint" hidden data-i18n="vault-empty-all">
+              Записей пока нет. Нажмите «Добавить».
+            </p>
+          </div>
+        </div>
 
         <!-- One row of the list, as markup the script clones. A `<template>` renders nothing,
              which is the point: a sample row on screen would be a row someone could click. -->
@@ -336,6 +362,7 @@
           <li class="item" data-testid="item-row">
             <button type="button" class="item-button">
               <span class="item-title"></span>
+              <span class="item-project" data-testid="item-project-badge"></span>
               <span class="item-subtitle"></span>
             </button>
             <button
@@ -357,6 +384,40 @@
           <input type="hidden" id="editor-id" />
           <label for="editor-name" data-i18n="editor-name-label">Название</label>
           <input id="editor-name" type="text" spellcheck="false" />
+          <label for="editor-project" data-i18n="item-project-label">Проект</label>
+          <select
+            id="editor-project"
+            data-testid="item-project"
+            data-i18n="item-project-label"
+            data-i18n-attr="aria-label"
+            aria-label="Проект"
+          ></select>
+          <!-- The name field belongs to the last entry of the picker, «＋ Новый проект…», and
+               is shown only while that entry is the chosen one. Its contents are the person's
+               work, so nothing here ever clears it. -->
+          <input
+            id="editor-project-new"
+            class="project-new"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            data-testid="item-project-new"
+            data-i18n="item-project-new-placeholder"
+            data-i18n-attr="placeholder"
+            placeholder="Имя нового проекта"
+            hidden
+          />
+          <!-- Shown only while the open item's own project is no longer one of the names in
+               use: the picker carries that name all the same, and this says why it is alone. -->
+          <p
+            class="hint"
+            id="editor-project-orphan-hint"
+            data-testid="editor-project-orphan-hint"
+            data-i18n="item-project-orphan-hint"
+            hidden
+          >
+            Такого проекта больше нет среди записей — запись сохранит его имя.
+          </p>
           <label for="editor-username" data-i18n="editor-username-label">Логин</label>
           <input id="editor-username" type="text" autocomplete="off" spellcheck="false" />
           <label for="editor-password" data-i18n="editor-password-label">Пароль</label>

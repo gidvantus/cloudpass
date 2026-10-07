@@ -111,9 +111,27 @@ export default {
   'vault-copy': 'Copy',
   'vault-copied': 'Copied',
 
+  // See the Russian table: the project column, its always-present «all» row, and the two
+  // sentences an empty list can carry — chosen by state, not by markup.
+  'vault-projects': 'Projects',
+  'vault-projects-empty': 'No projects yet. Name one in an item and it will appear here.',
+  'vault-all-passwords': 'All items',
+  'vault-no-project': 'No project',
+  'vault-scope-no-project': 'no project',
+  'vault-empty-all': 'No items yet. Press “Add”.',
+  'vault-empty-project': 'This project is empty so far. Press “Add” to file an item here.',
+
   'editor-title-new': 'Add an item',
   'editor-title-edit': 'Edit an item',
   'editor-name-label': 'Title',
+  // The project picker; see the Russian table for why the entries are built in code.
+  'item-project-label': 'Project',
+  'item-project-new-option': '＋ New project…',
+  'item-project-new-placeholder': 'Name of the new project',
+  'item-project-orphan': '{name} — no such project among the items any more',
+  'item-project-orphan-hint':
+    'This project has no items left, so it is not in the list. Saving keeps its name on this item.',
+  'item-project-error-empty': 'Enter a name for the new project, or choose “No project”.',
   'editor-username-label': 'Username',
   'editor-password-label': 'Password',
   'editor-url-label': 'URL',

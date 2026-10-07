@@ -235,7 +235,31 @@ input::placeholder {
   color: #4d4d4d;
 }
 
+/* The project picker in the editor: one more answer on the same form, so it is the same
+   field as the text inputs beside it — same fill, same hairline, same square corners.
+   `.language-select` in the masthead is a `select` too and keeps its own smaller metrics,
+   because a class beats this element rule. */
+select {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: var(--field);
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* The name of a new project: a field of the entry above it rather than a field of its own,
+   which the indent says without a second colour or a box around it. */
+.project-new {
+  padding-left: 26px;
+}
+
 input:focus-visible,
+select:focus-visible,
 textarea:focus-visible {
   outline: 1px solid var(--fg);
   outline-offset: 1px;
@@ -395,6 +419,98 @@ button:focus-visible {
   flex-wrap: wrap;
 }
 
+/* --- the cabinet: projects on the left, items on the right ------------------ */
+
+/* Two columns, one hairline between them, and the project column taking only the width it
+   needs (190-260px) so the list keeps the rest. Same mechanism as `.panel-split`: a grid,
+   one pixel of gap, and the seam drawn on the left edge of the right half. */
+.cabinet {
+  display: grid;
+  grid-template-columns: minmax(190px, 260px) 1fr;
+  gap: 1px;
+}
+
+.cabinet-projects {
+  padding-right: var(--gutter);
+}
+
+.cabinet-items {
+  border-left: 1px solid var(--line);
+  padding-left: var(--gutter);
+}
+
+/* The scope line above the list: the same quiet caption as the panel headings, because it
+   says the same kind of thing — what the list under it is. */
+.cabinet-items h2 {
+  margin-bottom: 12px;
+}
+
+.projects {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+
+.project {
+  border-bottom: 1px solid var(--line);
+}
+
+/* The whole row is the target, not the words in it: a project name is a long, unpredictable
+   string, and a person aiming at it should not have to hit the text. */
+.project-button {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 10px 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+  text-align: left;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.project-button:hover {
+  background: none;
+  color: var(--fg);
+}
+
+/* What is selected is stated in `aria-current` and shown here; the wording is never the
+   only signal. */
+.project-button[aria-current='true'] {
+  color: var(--fg);
+}
+
+.project-count {
+  font-size: 0.75rem;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.project-button[aria-current='true'] .project-count {
+  color: var(--fg);
+}
+
+/* The project an item belongs to, shown beside its title while the list is showing more
+   than one project. Empty for every other row, and an empty badge takes no room. */
+.item-project {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.item-project:empty {
+  display: none;
+}
+
 /* --- item list ------------------------------------------------------------- */
 
 .item-list {
@@ -499,6 +615,25 @@ button:focus-visible {
   }
 
   .panel-split > .panel-aside {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding-left: 0;
+    margin-top: 20px;
+    padding-top: 20px;
+  }
+
+  /* One column: the project filter stacks above the list it filters, and the hairline moves
+     to the seam between them. The left column is 190px at its narrowest, which a 720px
+     window can afford only by taking it from the list — so it does not. */
+  .cabinet {
+    grid-template-columns: 1fr;
+  }
+
+  .cabinet-projects {
+    padding-right: 0;
+  }
+
+  .cabinet-items {
     border-left: 0;
     border-top: 1px solid var(--line);
     padding-left: 0;

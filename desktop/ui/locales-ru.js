@@ -124,9 +124,31 @@ export default {
   'vault-copy': 'Скопировать',
   'vault-copied': 'Скопировано',
 
+  // The project column, and the two sentences an empty list can carry. `vault-all-passwords`
+  // is the one row that is always there: a list that can be left with nothing selected has to
+  // offer a way back. The `vault-empty-*` pair is chosen by `drawItems()` from the filter, so
+  // the key changes with the state rather than the text.
+  'vault-projects': 'Проекты',
+  'vault-projects-empty': 'Проектов пока нет. Назовите проект в записи — он появится здесь.',
+  'vault-all-passwords': 'Все записи',
+  'vault-no-project': 'Без проекта',
+  'vault-scope-no-project': 'без проекта',
+  'vault-empty-all': 'Записей пока нет. Нажмите «Добавить».',
+  'vault-empty-project':
+    'В этом проекте пока пусто. Нажмите «Добавить», чтобы положить сюда запись.',
+
   'editor-title-new': 'Новая запись',
   'editor-title-edit': 'Правка записи',
   'editor-name-label': 'Название',
+  // The project picker. Its entries are built by `drawProjectPicker()`, because an `<option>`
+  // has no `data-i18n` and a project name is a person's own text rather than a phrase.
+  'item-project-label': 'Проект',
+  'item-project-new-option': '＋ Новый проект…',
+  'item-project-new-placeholder': 'Имя нового проекта',
+  'item-project-orphan': '{name} — такого проекта больше нет среди записей',
+  'item-project-orphan-hint':
+    'В этом проекте не осталось записей, поэтому его нет в списке. Запись сохранит его имя.',
+  'item-project-error-empty': 'Введите имя нового проекта или выберите «Без проекта».',
   'editor-username-label': 'Логин',
   'editor-password-label': 'Пароль',
   'editor-url-label': 'Адрес',
