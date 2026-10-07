@@ -6,7 +6,7 @@
 // when every phrase in this client was English and lived in `commands.rs`.
 //
 // Keys are kebab-case and grouped by prefix: `status-*` for the line at the top, `join-*` /
-// `create-*` / `unlock-*` / `recover-*` for the account screens, `kit-*` for the Emergency
+// `create-*` / `recover-*` for the account screens, `kit-*` for the Emergency
 // Kit, `security-*` for the panel that rotates credentials, `vault-*` and `editor-*` for the
 // entries, and `sync-*` / `err-*` for status and failure.
 //
@@ -39,12 +39,16 @@ export default {
   'join-title': 'Вход в существующий аккаунт',
   'join-hint':
     'Введите имя аккаунта и мастер-пароль, с которыми вы регистрировались. Всё на сервере — шифротекст, поэтому именно эти две вещи, а не скопированный файл, делают эту машину способной прочитать ваше хранилище. Ключ устройства у этой машины свой; с другой ничего не копируется.',
+  'join-hint-known':
+    'Запись аккаунта уже есть на этой машине: ключ выводится здесь же из мастер-пароля, и чтобы открыть хранилище, сервер не нужен — он нужен только для синхронизации. Имя аккаунта подставлено из этой записи.',
   'join-identifier-label': 'Имя аккаунта',
   'join-password-label': 'Мастер-пароль',
   'join-submit': 'Войти',
   'join-cancel': 'Назад',
   'join-trust-hint':
     'Эта машина встречает сервер впервые, поэтому сейчас она принимает его ключ на доверие. Каждый следующий вход сверяется с ним.',
+  'join-recover-hint': 'Забыли мастер-пароль?',
+  'join-show-recover': 'Использовать ключ восстановления',
   'join-no-account': 'Ещё нет аккаунта на этом сервере?',
   'join-show-create': 'Создать хранилище на этой машине',
 
@@ -70,13 +74,6 @@ export default {
   'create-submit': 'Создать',
   'create-alt': 'Уже есть аккаунт — например созданный в web-портале?',
   'create-show-join': 'Войти на этой машине',
-
-  'unlock-title': 'Разблокировать',
-  'unlock-hint': 'Ключ выводится здесь. Никуда ничего не отправляется.',
-  'unlock-password-label': 'Мастер-пароль',
-  'unlock-submit': 'Разблокировать',
-  'unlock-recover-hint': 'Забыли мастер-пароль?',
-  'unlock-show-recover': 'Использовать ключ восстановления',
 
   'recover-title': 'Восстановление по Emergency Kit',
   'recover-hint':
