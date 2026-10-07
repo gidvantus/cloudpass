@@ -39,11 +39,12 @@
 
       <p class="banner" id="banner" hidden></p>
 
-      <!-- Sign in. First gate for a machine that has no local account yet ------ -->
+      <!-- Sign in. The first screen in both states: with no local account yet the form
+           enrols, with one it unlocks, and `app.js` decides which from the status. -->
       <section class="panel panel-split" id="join-panel" data-testid="join-panel" hidden>
         <div class="panel-main">
           <h2 data-i18n="join-title">Вход в существующий аккаунт</h2>
-          <p class="hint" data-i18n="join-hint">
+          <p class="hint" id="join-hint" data-testid="join-hint" data-i18n="join-hint">
             Введите имя аккаунта и мастер-пароль, с которыми вы регистрировались. Всё на
             сервере — шифротекст, поэтому именно эти две вещи, а не скопированный файл,
             делают эту машину способной прочитать ваше хранилище. Ключ устройства у этой
@@ -80,11 +81,28 @@
               </button>
             </div>
           </form>
-          <p class="hint" data-i18n="join-trust-hint">
+          <p
+            class="hint"
+            id="join-trust-hint"
+            data-testid="join-trust-hint"
+            data-i18n="join-trust-hint"
+          >
             Эта машина встречает сервер впервые, поэтому сейчас она принимает его ключ на
             доверие. Каждый следующий вход сверяется с ним.
           </p>
-          <p class="hint">
+          <p class="hint" id="recover-hint" data-testid="recover-hint">
+            <span data-i18n="join-recover-hint">Забыли мастер-пароль?</span>
+            <button
+              type="button"
+              class="link"
+              id="show-recover"
+              data-testid="show-recover"
+              data-i18n="join-show-recover"
+            >
+              Использовать ключ восстановления
+            </button>
+          </p>
+          <p class="hint" id="join-no-account-row" data-testid="join-no-account-row">
             <span data-i18n="join-no-account">Ещё нет аккаунта на этом сервере?</span>
             <button
               type="button"
@@ -193,30 +211,6 @@
             поэтому ни эта машина, ни сервер не могут его воспроизвести.
           </p>
         </aside>
-      </section>
-
-      <!-- Unlock ------------------------------------------------------------- -->
-      <section class="panel" id="unlock-panel" hidden>
-        <h2 data-i18n="unlock-title">Разблокировать</h2>
-        <p class="hint" data-i18n="unlock-hint">
-          Ключ выводится здесь. Никуда ничего не отправляется.
-        </p>
-        <form id="unlock-form" autocomplete="off">
-          <label for="unlock-password" data-i18n="unlock-password-label">Мастер-пароль</label>
-          <input id="unlock-password" type="password" autocomplete="current-password" />
-          <button type="submit" id="unlock-submit" data-i18n="unlock-submit">Разблокировать</button>
-        </form>
-        <p class="hint" id="recover-hint">
-          <span data-i18n="unlock-recover-hint">Забыли мастер-пароль?</span>
-          <button
-            type="button"
-            class="link"
-            id="show-recover"
-            data-i18n="unlock-show-recover"
-          >
-            Использовать ключ восстановления
-          </button>
-        </p>
       </section>
 
       <!-- Recovery ----------------------------------------------------------- -->

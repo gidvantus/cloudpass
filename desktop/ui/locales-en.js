@@ -27,12 +27,16 @@ export default {
   'join-title': 'Sign in to an existing account',
   'join-hint':
     'Enter the account name and master password you registered with. Everything on the server is ciphertext, so it is these two things — not a copied file — that make this machine able to read your vault. This machine gets its own device key; nothing is copied from the other one.',
+  'join-hint-known':
+    'This machine already holds the account record: the key is derived here from the master password, and the server is not needed to open the vault — only to synchronize. The account name is filled in from that record.',
   'join-identifier-label': 'Account name',
   'join-password-label': 'Master password',
   'join-submit': 'Sign in',
   'join-cancel': 'Back',
   'join-trust-hint':
     "This is the first time this machine has met the server, so it has to take the server's key on trust at this moment. Every later sign-in is checked against it.",
+  'join-recover-hint': 'Forgotten the master password?',
+  'join-show-recover': 'Use a recovery key',
   'join-no-account': 'No account on this server yet?',
   'join-show-create': 'Create a vault on this machine',
 
@@ -58,13 +62,6 @@ export default {
   'create-submit': 'Create',
   'create-alt': 'Already have an account — for example one you created in the web portal?',
   'create-show-join': 'Sign in on this machine',
-
-  'unlock-title': 'Unlock',
-  'unlock-hint': 'The key is derived here. Nothing is sent anywhere.',
-  'unlock-password-label': 'Master password',
-  'unlock-submit': 'Unlock',
-  'unlock-recover-hint': 'Forgotten the master password?',
-  'unlock-show-recover': 'Use a recovery key',
 
   'recover-title': 'Recover with the Emergency Kit',
   'recover-hint':

@@ -98,7 +98,6 @@ function renderDynamic() {
 const panels = {
   create: byId('create-panel'),
   join: byId('join-panel'),
-  unlock: byId('unlock-panel'),
   recover: byId('recover-panel'),
   kit: byId('kit-panel'),
   vault: byId('vault-panel'),
@@ -198,7 +197,6 @@ function wipeSecretFields() {
     'create-password',
     'create-confirm',
     'join-password',
-    'unlock-password',
     'recover-key',
     'recover-password',
     'recover-confirm',
@@ -492,9 +490,20 @@ async function refresh() {
     showPanel('vault');
     renderItems(await invoke('list_items'));
   } else {
-    // Signing in is the first gate: on a machine with no account yet the user is asked to
-    // enrol, not to create, and reaches creation through a link from that screen.
-    showPanel(status.has_account ? 'unlock' : 'join');
+    // Signing in is the first gate in both states: whether this machine has a local account
+    // record or not, the screen is the same, and only its field and its wording change.
+    showPanel('join');
+    const hasAccount = Boolean(status.has_account);
+    const identifier = byId('join-identifier');
+    // With a record there is nothing to type: the name comes from `account.json`, and the
+    // command that opens the vault reads it from there too — so the field only states it.
+    identifier.value = hasAccount ? (status.identifier ?? '') : '';
+    identifier.readOnly = hasAccount;
+    say(byId('join-hint'), hasAccount ? 'join-hint-known' : 'join-hint');
+    // Trust on first use is a fact about a machine that has not met the server yet, and the
+    // link to creation leads to a command that refuses while the record exists.
+    byId('join-trust-hint').hidden = hasAccount;
+    byId('join-no-account-row').hidden = hasAccount;
     // Offering a route that cannot work would be worse than not offering it: an account
     // whose record predates the kit has no recovery envelope, and saying so is kinder
     // than a dead end.
@@ -652,8 +661,14 @@ byId('join-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   clearComplaint();
 
+  // The state, not the field: the name is filled in from the record and is read-only, so
+  // reading it here would work — reading the status is simply the honest source of the
+  // branch. `lastStatus` is null only before the first `refresh()` answers, which is not a
+  // state the form can be submitted in; the enrol path it falls back to refuses loudly
+  // rather than opening the wrong thing.
+  const hasAccount = Boolean(lastStatus && lastStatus.has_account);
   const password = byId('join-password').value;
-  if (!byId('join-identifier').value.trim()) {
+  if (!hasAccount && !byId('join-identifier').value.trim()) {
     complain('err-account-name-required');
     return;
   }
@@ -663,12 +678,17 @@ byId('join-form').addEventListener('submit', async (event) => {
   }
 
   try {
-    await withBusy(byId('join-submit'), () =>
-      invoke('enrol_vault', {
+    await withBusy(byId('join-submit'), () => {
+      if (hasAccount) {
+        // Opening an existing vault: the identifier comes from the local record, so this
+        // call stays one argument and no registration is attempted.
+        return invoke('unlock_vault', { masterPassword: password });
+      }
+      return invoke('enrol_vault', {
         identifier: byId('join-identifier').value,
         masterPassword: password,
-      }),
-    );
+      });
+    });
     await refresh();
   } catch (error) {
     complain(describe(error));
@@ -807,22 +827,6 @@ byId('new-kit-form').addEventListener('submit', async (event) => {
     showKit(issued.emergency_kit, { titleKey: 'kit-new-title' });
   } catch (error) {
     complain(describe(error));
-    wipeSecretFields();
-  }
-});
-
-byId('unlock-form').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  clearComplaint();
-
-  try {
-    await withBusy(byId('unlock-submit'), () =>
-      invoke('unlock_vault', { masterPassword: byId('unlock-password').value }),
-    );
-    await refresh();
-  } catch (error) {
-    complain(describe(error));
-  } finally {
     wipeSecretFields();
   }
 });
