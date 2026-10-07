@@ -212,6 +212,9 @@ pub struct VaultStatus {
 pub struct ItemSummary {
     pub id: String,
     pub title: String,
+    /// The project this item is filed under, or the empty string for none. The interface
+    /// groups the list by it; the vault derives the set of names in use from the same field.
+    pub project: String,
     pub username: String,
     pub url: String,
     pub has_totp: bool,
@@ -738,11 +741,25 @@ pub async fn list_items(state: State<'_, SharedState>) -> CommandResult<Vec<Item
             pending: pending.contains(&item.id),
             id: item.id.to_string(),
             title: item.title,
+            project: item.project,
             username: item.username,
             url: item.url,
             has_totp: item.totp.is_some(),
         })
         .collect())
+}
+
+/// Lists the project names in use, sorted the way the vault orders its items.
+///
+/// A project has no record of its own — there is no table and no server-side notion of one.
+/// The set of projects is exactly the set of names the items carry, so this is derived from
+/// the same entries [`list_items`] returns and cannot disagree with them. Empty names are
+/// not projects; a name exists as long as something is filed under it.
+#[tauri::command]
+pub async fn list_projects(state: State<'_, SharedState>) -> CommandResult<Vec<String>> {
+    let mut state = state.lock().await;
+    let vault = state.unlocked().map_err(CommandError::from)?;
+    Ok(vault.projects())
 }
 
 /// Returns one item's full contents, including the password.

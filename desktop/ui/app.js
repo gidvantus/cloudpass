@@ -91,7 +91,12 @@ function renderDynamic() {
   // than by the markup, and the action's language is not necessarily the reader's.
   renderBanner();
   drawStatus();
+  drawProjects();
   drawItems();
+  // The picker's entries are the one text the translator cannot reach — an `<option>` has no
+  // `data-i18n`, and a project name is not a phrase — so a language switch has to rebuild
+  // them here or they keep the wording of the language that was just left.
+  drawProjectPicker();
   drawUpdate();
 }
 
@@ -110,6 +115,9 @@ const banner = byId('banner');
 const statusLine = byId('status');
 const itemList = byId('item-list');
 const emptyHint = byId('empty-hint');
+const projectList = byId('project-list');
+const projectEmpty = byId('project-empty');
+const itemScope = byId('item-scope');
 const syncNote = byId('sync-note');
 const updateNotice = byId('update-notice');
 const updateText = byId('update-text');
@@ -119,6 +127,23 @@ const updateFooter = byId('app-footer');
 let lastStatus = null;
 /** The last list the vault reported, for the same reason. */
 let lastItems = [];
+/**
+ * Which project the list is filtered by: `null` for every item, `''` for the ones filed
+ * under nothing, and a name for that project. Three different answers, which is why the
+ * two falsy-looking cases are not merged.
+ */
+let selectedProject = null;
+/** The project names in use, as the vault last answered them. */
+let lastProjects = [];
+/**
+ * The editor's answer to "which project", as the value of the picker — or one of the two
+ * values that are not names at all: `''` for «Без проекта», and [`NEW_PROJECT`] for the
+ * entry that asks for a name instead of carrying one.
+ */
+let editorProject = '';
+
+/** The picker value that means "ask for a name", not a project anyone could be in. */
+const NEW_PROJECT = 'cloudpass.new-project';
 
 /** What the banner is showing, as a key to translate. */
 let complaint = null;
@@ -297,9 +322,28 @@ const itemRowTemplate = byId('item-row-template');
  */
 function drawItems() {
   itemList.replaceChildren();
-  emptyHint.hidden = lastItems.length > 0;
 
-  for (const item of lastItems) {
+  const visible = lastItems.filter(matchesSelection);
+  // Only one of two sentences can be true, and which one is decided by the filter rather
+  // than by the markup — the key moves with the state, so a language switch says the same
+  // thing about the same empty list.
+  emptyHint.hidden = visible.length > 0;
+  say(emptyHint, selectedProject === null ? 'vault-empty-all' : 'vault-empty-project');
+
+  // What the list is showing, in the heading above it: nothing while it is showing
+  // everything, «без проекта» for the ungrouped ones, and the project's own name otherwise.
+  if (selectedProject === null) {
+    delete itemScope.dataset.i18n;
+    itemScope.textContent = '';
+  } else if (selectedProject === '') {
+    say(itemScope, 'vault-scope-no-project');
+  } else {
+    // A project name is the person's own text, so it is written as it is and not translated.
+    delete itemScope.dataset.i18n;
+    itemScope.textContent = selectedProject;
+  }
+
+  for (const item of visible) {
     const row = itemRowTemplate.content.firstElementChild.cloneNode(true);
     row.setAttribute('data-item-id', item.id);
     i18n.applyTranslations(row);
@@ -308,6 +352,11 @@ function drawItems() {
     button.addEventListener('click', () => openEditor(item.id));
 
     button.querySelector('.item-title').textContent = item.title || t('vault-untitled');
+
+    // The badge is worth its room only while the list is showing more than one project:
+    // inside a single project every row would repeat the same words.
+    button.querySelector('.item-project').textContent =
+      selectedProject === null && item.project ? item.project : '';
 
     const subtitle = button.querySelector('.item-subtitle');
     const parts = [item.username, item.url].filter(Boolean);
@@ -323,6 +372,101 @@ function drawItems() {
     copy.addEventListener('click', () => copyPassword(item.id, copy));
 
     itemList.append(row);
+  }
+}
+
+/** Whether an item belongs to what the project column currently has selected. */
+function matchesSelection(item) {
+  if (selectedProject === null) {
+    return true;
+  }
+  return (item.project || '') === selectedProject;
+}
+
+// --- the project column -----------------------------------------------------
+
+/**
+ * The project list, and with it the choice of what the item list shows.
+ *
+ * «Все записи» is always first, because it is what a person wants most of the time and
+ * because a list that can be left with nothing selected has to offer a way back.
+ */
+function drawProjects() {
+  projectList.replaceChildren();
+
+  projectList.append(projectRow(t('vault-all-passwords'), lastItems.length, null));
+
+  for (const name of lastProjects) {
+    projectList.append(
+      projectRow(
+        name,
+        lastItems.filter((item) => item.project === name).length,
+        name,
+      ),
+    );
+  }
+
+  // Only offered when it would actually show something. An «Без проекта» row that leads to
+  // an empty list is a worse answer than not offering it at all.
+  const ungrouped = lastItems.filter((item) => !item.project).length;
+  if (ungrouped > 0) {
+    projectList.append(projectRow(t('vault-no-project'), ungrouped, ''));
+  }
+
+  projectEmpty.hidden = lastProjects.length > 0;
+}
+
+/** One row of the column: a button over the whole line, with the count at its end. */
+function projectRow(label, count, value) {
+  const row = document.createElement('li');
+  row.className = 'project';
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'project-button';
+  button.setAttribute('data-testid', 'project');
+  // Three different rows, told apart by this attribute alone: «Все записи» has no
+  // `data-project` at all, a named project carries its name, and «Без проекта» carries the
+  // empty string. The absent attribute is what keeps "everything" from looking identical to
+  // "filed under nothing".
+  if (value !== null) {
+    button.setAttribute('data-project', value);
+  }
+  // The state is on the element as `aria-current`, not as a class: it is a statement about
+  // what the list is showing, and there is exactly one such element at any moment.
+  button.setAttribute('aria-current', String(selectedProject === value));
+
+  const name = document.createElement('span');
+  name.textContent = label;
+  button.append(name);
+
+  const badge = document.createElement('span');
+  badge.className = 'project-count';
+  badge.textContent = String(count);
+  button.append(badge);
+
+  button.addEventListener('click', () => {
+    selectedProject = value;
+    drawProjects();
+    drawItems();
+  });
+
+  row.append(button);
+  return row;
+}
+
+/**
+ * The project names already in use, or none if they cannot be read.
+ *
+ * They are a suggestion for the column and for the editor's picker, and nothing else: a
+ * vault that opens without them is still a working vault, so a failure here must not be a
+ * reason the items cannot be listed.
+ */
+async function loadProjectNames() {
+  try {
+    lastProjects = await invoke('list_projects');
+  } catch {
+    lastProjects = [];
   }
 }
 
@@ -491,6 +635,22 @@ async function refresh() {
   if (status.unlocked) {
     showPanel('vault');
     renderItems(await invoke('list_items'));
+    await loadProjectNames();
+
+    // A project exists exactly as long as something is filed under it, so the selected one
+    // can stop existing between two loads — its last item was deleted, or a synchronization
+    // moved it. Falling back to «Все записи» is the only honest answer: the alternative is
+    // an empty list and nothing on screen to click away from. «Без проекта» is never reset —
+    // it is a filter, not a name, and no load can retire it.
+    if (
+      selectedProject !== null &&
+      selectedProject !== '' &&
+      !lastProjects.includes(selectedProject)
+    ) {
+      selectedProject = null;
+      drawItems();
+    }
+    drawProjects();
   } else {
     // Signing in is the first gate: on a machine with no account yet the user is asked to
     // enrol, not to create, and reaches creation through a link from that screen.
@@ -527,11 +687,18 @@ async function openEditor(id) {
   const form = byId('editor-form');
   form.reset();
 
+  // The picker offers the names in use, so it reads them again here: the list may have
+  // changed since the panel was drawn, and a stale suggestion is worse than none.
+  await loadProjectNames();
+
   if (id) {
     // The one place a password crosses the boundary, and only for one item.
     const item = await invoke('reveal_item', { id });
     byId('editor-id').value = id;
     byId('editor-name').value = item.title;
+    // Taking the project from the item and nowhere else is what keeps an edit from
+    // silently stripping it: the field is what the next save writes back.
+    editorProject = item.project || '';
     byId('editor-username').value = item.username;
     byId('editor-password').value = item.password;
     byId('editor-url').value = item.url;
@@ -542,15 +709,95 @@ async function openEditor(id) {
     byId('editor-id').value = '';
     say(byId('editor-title'), 'editor-title-new');
     byId('editor-delete').hidden = true;
+    // A new item lands in whatever project the column was showing. That is the whole point
+    // of picking one before pressing «Добавить» — otherwise the choice would be decoration.
+    editorProject = selectedProject || '';
   }
 
   showPanel('editor');
+  drawProjectPicker();
   byId('editor-name').focus();
+}
+
+/**
+ * The project picker: «Без проекта», every name in use, and «＋ Новый проект…».
+ *
+ * Rebuilt whole rather than patched, because that is what makes a language switch free: the
+ * entries are the only text in it that the translator cannot reach, and redrawing them from
+ * `editorProject` puts the new language on all of them without touching a single answer the
+ * person has given. Nothing here clears a field — for the same reason.
+ *
+ * The open item's own project gets an entry of its own when it is no longer one of the names
+ * in use: its last item was deleted, or a synchronization moved it. Leaving it out would
+ * silently re-file the item under «Без проекта» on the next save, and losing a grouping is
+ * worse than showing an entry nobody else has.
+ */
+function drawProjectPicker() {
+  const select = byId('editor-project');
+  select.replaceChildren();
+
+  select.append(projectOption('', 'vault-no-project', 'item-project-none'));
+
+  for (const name of lastProjects) {
+    select.append(projectOption(name, null, 'item-project-option'));
+  }
+
+  // Named as well as marked: the entry has to say which project it is about, because the
+  // list around it no longer does.
+  if (isOrphanProject()) {
+    const option = projectOption(editorProject, 'item-project-orphan', 'item-project-orphan');
+    option.textContent = t('item-project-orphan', { name: editorProject });
+    select.append(option);
+  }
+
+  select.append(projectOption(NEW_PROJECT, 'item-project-new-option', 'item-project-new'));
+
+  // The entry is always there by construction: it was either one of the names above, or the
+  // orphan entry, or the last one in the list.
+  select.value = editorProject;
+  drawProjectField();
+}
+
+/** One entry of the picker: its value is the project, its wording is a key. */
+function projectOption(value, key, testId) {
+  const option = document.createElement('option');
+  option.value = value;
+  option.setAttribute('data-testid', testId);
+  if (key) {
+    option.textContent = t(key);
+  } else {
+    // A project name is the person's own text, so it is written as it is and not translated.
+    option.textContent = value;
+  }
+  return option;
+}
+
+/** Whether the open item's project is one the vault no longer knows about. */
+function isOrphanProject() {
+  return (
+    editorProject !== '' && editorProject !== NEW_PROJECT && !lastProjects.includes(editorProject)
+  );
+}
+
+/**
+ * The two things beside the picker that the chosen entry decides: the field for a new name,
+ * and the note explaining a project that is not in the list.
+ *
+ * Neither is ever cleared here. A language switch runs through this, and the name someone has
+ * half typed is their work, not the page's.
+ */
+function drawProjectField() {
+  byId('editor-project-new').hidden = editorProject !== NEW_PROJECT;
+  byId('editor-project-orphan-hint').hidden = !isOrphanProject();
 }
 
 function currentDraft() {
   return {
     title: byId('editor-name').value,
+    // The picker's last entry is a question, not a name: what belongs in the item is what
+    // the field beside it holds. Leaving this out is not a cosmetic bug — `ItemDraft::project`
+    // carries a serde default, so every save would quietly strip the item of its project.
+    project: editorProject === NEW_PROJECT ? byId('editor-project-new').value : editorProject,
     username: byId('editor-username').value,
     password: byId('editor-password').value,
     url: byId('editor-url').value,
@@ -829,6 +1076,17 @@ byId('unlock-form').addEventListener('submit', async (event) => {
 
 byId('add-item').addEventListener('click', () => openEditor(null));
 
+byId('editor-project').addEventListener('change', () => {
+  editorProject = byId('editor-project').value;
+  drawProjectField();
+
+  // «＋ Новый проект…» is a question, and the answer is typed in the field beside it: the
+  // cursor goes there rather than making the person find it.
+  if (editorProject === NEW_PROJECT) {
+    byId('editor-project-new').focus();
+  }
+});
+
 byId('sync-now').addEventListener('click', async () => {
   clearComplaint();
   try {
@@ -856,6 +1114,13 @@ byId('editor-cancel').addEventListener('click', async () => {
 byId('editor-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   clearComplaint();
+
+  // «＋ Новый проект…» is a question before it is a value, and an unanswered one is not a
+  // project: nothing is saved and the editor stays exactly as it is until it has a name.
+  if (editorProject === NEW_PROJECT && !byId('editor-project-new').value.trim()) {
+    complain('item-project-error-empty');
+    return;
+  }
 
   const id = byId('editor-id').value;
   try {

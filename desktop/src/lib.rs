@@ -70,6 +70,7 @@ pub fn run() {
             commands::change_master_password,
             commands::set_server_url,
             commands::list_items,
+            commands::list_projects,
             commands::reveal_item,
             commands::copy_password,
             commands::add_item,
