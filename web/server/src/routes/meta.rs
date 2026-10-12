@@ -29,12 +29,20 @@ pub struct MetaResponse {
     /// `None` is a normal answer: a server built without running the desktop build script has
     /// nothing to hand out, and the portal then shows no download at all rather than a link
     /// that 404s.
-    pub desktop: Option<DesktopBuildDto>,
+    pub desktop: Option<BuildDto>,
+    /// The Android application this server offers, if it has one.
+    ///
+    /// A field of its own rather than an entry in a list, because the two are not
+    /// interchangeable: a phone cannot install an `.exe`, and somebody who came for a desktop
+    /// program must not be handed an `.apk` because it happened to be built more recently.
+    /// `None` means this server has no Android build, which is the normal answer for a server
+    /// that never made one.
+    pub android: Option<BuildDto>,
 }
 
-/// A desktop build, described well enough that a person can verify what they downloaded.
+/// One downloadable build, described well enough that a person can verify what they downloaded.
 #[derive(Debug, Serialize)]
-pub struct DesktopBuildDto {
+pub struct BuildDto {
     pub file: String,
     /// Fetch path, relative to this origin.
     pub url: String,
@@ -48,6 +56,22 @@ pub struct DesktopBuildDto {
     /// not care about updates — the portal, for one — sees the same object it always did
     /// with one more field in it.
     pub version: Option<String>,
+}
+
+impl BuildDto {
+    /// Describes one discovered build for the wire.
+    ///
+    /// Shared by both kinds, because the description a person checks is the same whether the
+    /// file behind it is an installer or a package: name, size, hash, version.
+    fn describe(build: &crate::downloads::OfferedBuild) -> Self {
+        Self {
+            file: build.file_name.clone(),
+            url: build.url.clone(),
+            size: build.size,
+            sha256: build.sha256.clone(),
+            version: build.version.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -72,12 +96,7 @@ pub async fn meta(State(state): State<Arc<AppState>>) -> Json<MetaResponse> {
         },
         registration_open: state.registration_open,
         server_time: crate::codec::now_unix(),
-        desktop: state.desktop_build.as_ref().map(|build| DesktopBuildDto {
-            file: build.file_name.clone(),
-            url: build.url.clone(),
-            size: build.size,
-            sha256: build.sha256.clone(),
-            version: build.version.clone(),
-        }),
+        desktop: state.downloads.desktop.as_ref().map(BuildDto::describe),
+        android: state.downloads.android.as_ref().map(BuildDto::describe),
     })
 }

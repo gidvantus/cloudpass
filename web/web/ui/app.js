@@ -153,8 +153,8 @@ let editingItem = false;
  * is the point, since a switch may not cost anyone their answer.
  */
 let editorProject = '';
-/** What the server offers as a desktop build, if anything. */
-let desktopBuild = null;
+/** The builds the server offers, by kind. A kind it does not have is absent, not `null`. */
+let offeredBuilds = {};
 /** Why the module never started, if it did not. */
 let bootFailure = null;
 
@@ -336,7 +336,7 @@ function renderDynamic() {
   renderItems();
   renderItemTitle();
   renderProjectPicker();
-  renderDesktop();
+  renderOffers();
 }
 
 function renderBoot() {
@@ -1010,47 +1010,79 @@ window.addEventListener('hashchange', () => {
   render().catch((error) => complain(describe(error)));
 });
 
-// --- the desktop build ------------------------------------------------------
+// --- the offered builds -----------------------------------------------------
 
 /**
- * Offers the desktop application, if this server has one to offer.
+ * How each offer is presented: the field in `/api/v1/meta`, and the elements it fills.
  *
- * The server describes the build it is serving — name, size, SHA-256 — rather than the page
- * hard-coding a file name. That is what keeps the link honest: a download section appears only
+ * A table rather than two copies of the same six lines, because the two offers differ only in
+ * which artifact they describe — the moment they differ in more than that is the moment a
+ * second block stops being worth having.
+ */
+const OFFERS = [
+  {
+    kind: 'desktop',
+    block: 'desktop-block',
+    link: 'desktop-link',
+    meta: 'desktop-meta',
+    hash: 'desktop-hash',
+  },
+  {
+    kind: 'android',
+    block: 'android-block',
+    link: 'android-link',
+    meta: 'android-meta',
+    hash: 'android-hash',
+  },
+];
+
+/**
+ * Offers the applications this server has to offer.
+ *
+ * The server describes each build it is serving — name, size, SHA-256 — rather than the page
+ * hard-coding a file name. That is what keeps the links honest: a download section appears only
  * when there is a file behind it, and the hash shown is computed from the bytes being served,
  * so it cannot describe a build that was replaced yesterday.
+ *
+ * The two kinds are read from the same answer and shown independently: a server with only one
+ * of them shows only that one, which is the normal case rather than a degraded one.
  */
-async function loadDesktopBuild() {
+async function loadOfferedBuilds() {
   try {
     const response = await fetch('/api/v1/meta');
     if (!response.ok) {
       return;
     }
-    const { desktop } = await response.json();
-    if (!desktop) {
-      return;
+    const meta = await response.json();
+
+    for (const offer of OFFERS) {
+      if (meta[offer.kind]) {
+        offeredBuilds[offer.kind] = meta[offer.kind];
+      }
     }
 
-    desktopBuild = desktop;
-    renderDesktop();
+    renderOffers();
   } catch {
-    // Nothing to do and nothing to say: a server that offers no desktop build is a normal
-    // server, and an empty section is a better answer than an error nobody can act on.
+    // Nothing to do and nothing to say: a server that offers no build is a normal server, and
+    // an empty section is a better answer than an error nobody can act on.
   }
 }
 
-function renderDesktop() {
-  if (!desktopBuild) {
-    return;
-  }
+function renderOffers() {
+  for (const offer of OFFERS) {
+    const build = offeredBuilds[offer.kind];
+    if (!build) {
+      continue;
+    }
 
-  // The label on the link is a translation key and is set by `applyTranslations()`; only the
-  // target is filled in here.
-  byId('desktop-link').href = desktopBuild.url;
-  byId('desktop-meta').textContent = `${desktopBuild.file} · ${formatBytes(desktopBuild.size)}`;
-  byId('desktop-hash').textContent = `SHA-256 ${desktopBuild.sha256}`;
-  byId('desktop-hash').hidden = false;
-  byId('desktop-block').hidden = false;
+    // The label on the link is a translation key and is set by `applyTranslations()`; only the
+    // target is filled in here.
+    byId(offer.link).href = build.url;
+    byId(offer.meta).textContent = `${build.file} · ${formatBytes(build.size)}`;
+    byId(offer.hash).textContent = `SHA-256 ${build.sha256}`;
+    byId(offer.hash).hidden = false;
+    byId(offer.block).hidden = false;
+  }
 }
 
 function formatBytes(bytes) {
@@ -1083,7 +1115,7 @@ init()
 
     // After the first screen is up: this is a side note on the landing page, not a reason to
     // hold the portal back if the server is slow to answer.
-    loadDesktopBuild();
+    loadOfferedBuilds();
   })
   .catch((error) => {
     bootFailure = describe(error);

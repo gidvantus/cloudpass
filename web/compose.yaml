@@ -17,6 +17,15 @@
 # reuse the cargo caches mounted in the Dockerfile, so a change to `crates/` or `web/web/`
 # recompiles only what moved.
 
+# Declared rather than left to Docker's default. Without it the project is named after the
+# directory this file happens to sit in, so moving the file — as it was moved here from the
+# repository root — renames the project and with it the volume. The data lives in
+# `cloudpass_cloudpass-data`; a project called `web` would look for `web_cloudpass-data`, find
+# nothing, and start on an empty volume, presenting a server with no accounts on it. The data
+# would still exist one volume over, which is exactly the kind of loss that is easy to cause
+# and hard to notice.
+name: cloudpass
+
 services:
   cloudpass:
     build:

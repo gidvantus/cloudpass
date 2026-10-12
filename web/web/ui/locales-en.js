@@ -47,6 +47,11 @@ export default {
   'landing-desktop-lede':
     'The portal and the application open the same account: save a password here and it appears there. The application does not need a browser and works when the server is unreachable.',
   'landing-desktop-download': 'Download for Windows',
+  'landing-android-eyebrow': 'Android application',
+  'landing-android-title': 'The same account, in your pocket',
+  'landing-android-lede':
+    'A separate installation file for a phone or tablet. Open it on the device and allow installation from this source — the application connects to the same account as the portal.',
+  'landing-android-download': 'Download for Android',
 
   'footer-tagline': 'Encryption in the browser · the server never reads your data',
 

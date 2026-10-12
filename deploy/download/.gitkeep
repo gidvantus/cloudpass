@@ -1,0 +1,9 @@
+# The installer and the Android package, put here for the running server to hand out.
+#
+# The files are ignored by git (they are build output, and tens of megabytes of it); this
+# directory is kept because `deploy/compose.yaml` mounts it over the image's own copy
+# of `/app/ui/download`. Without the directory Docker would create it as root on first start,
+# and with it empty the landing page simply shows no downloads — which is the honest answer
+# to "has anything been built yet", not an error.
+#
+# See docs/DEPLOY.md for where the two files come from.

@@ -1,0 +1,86 @@
+# The public half of a deployment: TLS in front, and the two client builds served from a
+# directory that can be replaced without rebuilding the image.
+#
+#   docker compose --env-file deploy/.env -f deploy/compose.yaml up -d --build
+#
+# One `-f`, not two. This file `include`s the application's own `web/compose.yaml` rather
+# than being passed alongside it, and that is not tidiness — it is the only way the paths
+# below mean what they say.
+#
+# Compose resolves a relative host path against the **project directory**, which is the
+# directory of the first file named with `-f`, not the directory of the file the path is
+# written in. Passing `-f web/compose.yaml -f deploy/compose.deploy.yaml` therefore turned
+# `./Caddyfile` into `web/Caddyfile` and `./download` into `web/download` — a silent wrong
+# mount on one, and an empty directory invented on the other. `include` is the mechanism
+# that resolves each file's paths against that file's own directory, so `../web/compose.yaml`
+# keeps its build context and `./Caddyfile` here keeps its meaning.
+#
+# `web/compose.yaml` still describes the whole application and is still what a developer
+# runs on its own; nothing in it changes for this file's sake. The split is deliberate: the
+# local command in the README stays exactly as documented, and this file is only ever named
+# by someone who means to serve the thing.
+
+name: cloudpass
+
+include:
+  - ../web/compose.yaml
+
+services:
+  cloudpass:
+    volumes:
+      # The installer and the Android package, which the server finds by scanning this
+      # directory at startup.
+      #
+      # Mounted instead of baked in, because these two files change on their own schedule: a
+      # new APK is a `cp` and a restart, not a Rust rebuild. The trade is that the mount
+      # *replaces* whatever the image was built with, so an empty `deploy/download/` means a
+      # portal with no downloads at all rather than a stale one — the landing page shows
+      # nothing and `/api/v1/meta` reports `null` for both kinds. See docs/DEPLOY.md.
+      - ./download:/app/ui/download:ro
+
+    environment:
+      # Closed here, unlike in the local file. A server reachable from anywhere with open
+      # registration lets a stranger create an account on it; the value is raised to "1" for
+      # the single run that creates the first account, and lowered again immediately after.
+      CLOUDPASS_REGISTRATION_OPEN: "${CLOUDPASS_REGISTRATION_OPEN:-0}"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: cloudpass-caddy
+    restart: unless-stopped
+
+    ports:
+      # The only ports this deployment opens. The application itself stays on loopback: Caddy
+      # reaches it over the compose network by service name, so nothing needs to be published
+      # for the site to work.
+      - "80:80"
+      - "443:443"
+      # HTTP/3. Optional, and harmless to omit, but leaving it out means the certificate for
+      # the UDP listener is never used and clients fall back to TCP without saying so.
+      - "443:443/udp"
+
+    environment:
+      # Both are required, with no fallback: a deployment that cannot name its domain or its
+      # contact address should fail at `up` rather than obtain a certificate that nobody is
+      # watching the expiry of.
+      CLOUDPASS_DOMAIN: "${CLOUDPASS_DOMAIN:?set CLOUDPASS_DOMAIN in deploy/.env}"
+      ACME_EMAIL: "${ACME_EMAIL:?set ACME_EMAIL in deploy/.env}"
+
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The certificates and the ACME account key. Losing this does not lose any account — a
+      # new certificate is issued on the next start — but Let's Encrypt's rate limits turn a
+      # lost volume into a bad afternoon, so it is worth including in the backup.
+      - caddy-data:/data
+      - caddy-config:/config
+
+    depends_on:
+      cloudpass:
+        # Caddy asks for a certificate on the first request it forwards, so an upstream that
+        # is not answering yet mostly means a burst of 502s during the first seconds. The
+        # application's own healthcheck is already the right question to wait on.
+        condition: service_healthy
+
+volumes:
+  caddy-data:
+  caddy-config:

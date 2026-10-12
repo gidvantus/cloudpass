@@ -124,10 +124,10 @@ pub async fn serve(State(state): State<Arc<AppState>>, uri: Uri) -> Response {
         // exactly the kind that survives to production.
         Some("woff2") => ("font/woff2", "no-store"),
         Some("txt") => ("text/plain; charset=utf-8", "no-store"),
-        // A Windows program. `application/octet-stream` is deliberate rather than a
-        // PE-specific type: it is what makes every browser save the file instead of trying to
-        // be clever with it.
-        Some("exe") | Some("msi") => ("application/octet-stream", "no-store"),
+        // A program rather than a page, on either platform. `application/octet-stream` is
+        // deliberate rather than a platform-specific type: it is what makes every browser save
+        // the file instead of trying to be clever with it.
+        Some("exe") | Some("msi") | Some("apk") => ("application/octet-stream", "no-store"),
         _ => ("application/octet-stream", "no-store"),
     };
 
@@ -139,10 +139,10 @@ pub async fn serve(State(state): State<Arc<AppState>>, uri: Uri) -> Response {
         .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
         .header(header::REFERRER_POLICY, "no-referrer");
 
-    // Installers are downloads, not pages. Without this a browser that has been taught to
-    // associate something with `.exe` would navigate to it, and a `Content-Disposition` also
-    // means the saved file keeps the name the server advertised — which is the name whose
-    // SHA-256 the portal publishes.
+    // Builds are downloads, not pages. Without this a browser that has been taught to associate
+    // something with `.exe` would navigate to it, and a `Content-Disposition` also means the
+    // saved file keeps the name the server advertised — which is the name whose SHA-256 the
+    // portal publishes.
     if let Some(name) = attachment_name(&real) {
         builder = builder.header(
             header::CONTENT_DISPOSITION,
@@ -160,6 +160,14 @@ pub async fn serve(State(state): State<Arc<AppState>>, uri: Uri) -> Response {
     }
 }
 
+/// File types that are downloads rather than pages.
+///
+/// `.apk` is here for exactly the reason `.exe` is: without a `Content-Disposition` a browser is
+/// free to treat the file as something to open, and to save it under a name that need not be the
+/// one the portal advertised — which breaks the only check a person can actually make on a
+/// binary, comparing its hash with the published one.
+const DOWNLOAD_EXTENSIONS: [&str; 3] = ["exe", "msi", "apk"];
+
 /// The name to offer as a download, for the file types that are downloads.
 ///
 /// Quoted in the header, so a file name containing a quote would break out of it. Names come
@@ -167,7 +175,10 @@ pub async fn serve(State(state): State<Arc<AppState>>, uri: Uri) -> Response {
 /// than trusted — a small check in front of a small risk, which is the cheapest kind.
 fn attachment_name(path: &Path) -> Option<&str> {
     let extension = path.extension()?.to_str()?;
-    if !extension.eq_ignore_ascii_case("exe") && !extension.eq_ignore_ascii_case("msi") {
+    if !DOWNLOAD_EXTENSIONS
+        .iter()
+        .any(|known| extension.eq_ignore_ascii_case(known))
+    {
         return None;
     }
     let name = path.file_name()?.to_str()?;
@@ -208,7 +219,7 @@ mod tests {
         std::fs::write(dir.join("app.css"), b":root{}").expect("write");
         std::fs::write(dir.join("montserrat.woff2"), b"wOF2 not really").expect("write");
 
-        // An installer, so the download path is covered by the same handler.
+        // An installer and a package, so the download path is covered for both kinds.
         let download = dir.join("download");
         std::fs::create_dir_all(&download).expect("create download dir");
         std::fs::write(
@@ -216,6 +227,8 @@ mod tests {
             b"MZ not really",
         )
         .expect("write");
+        std::fs::write(download.join("CloudPass_0.1.0_android.apk"), b"PK not really")
+            .expect("write");
         dir
     }
 
@@ -229,7 +242,7 @@ mod tests {
             prelogin_secret: [0u8; 32],
             registration_open: true,
             web_root,
-            desktop_build: None,
+            downloads: Default::default(),
         })
     }
 
@@ -358,6 +371,40 @@ mod tests {
         // A page is not a download, and must not be labelled as one.
         let page = serve(State(Arc::clone(&state)), Uri::from_static("/app.js")).await;
         assert!(page.headers().get(header::CONTENT_DISPOSITION).is_none());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An Android package has to arrive as a download for the same reason an installer does.
+    ///
+    /// This is the case that was missing: the extension list knew about Windows only, so a
+    /// package was served inline and a browser was free to save it under another name.
+    #[tokio::test]
+    async fn an_android_package_is_served_as_a_download_under_its_own_name() {
+        let dir = portal_dir();
+        let state = state_with(resolve_root(&dir)).await;
+
+        let response = serve(
+            State(Arc::clone(&state)),
+            Uri::from_static("/download/CloudPass_0.1.0_android.apk"),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get(header::CONTENT_DISPOSITION)
+                .expect("content disposition")
+                .to_str()
+                .expect("ascii"),
+            "attachment; filename=\"CloudPass_0.1.0_android.apk\""
+        );
+        assert_eq!(
+            response.headers().get(header::CONTENT_TYPE).expect("type"),
+            "application/octet-stream"
+        );
+        assert_eq!(body_of(response).await, "PK not really");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

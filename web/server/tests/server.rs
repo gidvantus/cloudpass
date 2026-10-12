@@ -34,7 +34,7 @@ use cloudpass_core::opaque::AuthInput;
 use cloudpass_core::params::{KdfParams, KDF_SALT_LEN};
 use cloudpass_core::vault::{seal_item, wrap_user_key, UserKey};
 use cloudpass_server::codec::B64;
-use cloudpass_server::downloads::DesktopBuild;
+use cloudpass_server::downloads::{Downloads, OfferedBuild};
 use cloudpass_server::{app, AppState};
 
 const IDENTIFIER: &str = "alice@example.com";
@@ -188,13 +188,26 @@ impl Harness {
     /// Injected rather than discovered: a test whose answer depends on what happens to be
     /// sitting in the real download directory would pass or fail according to whether
     /// somebody had built the desktop application on this machine.
-    async fn start_offering(build: Option<DesktopBuild>) -> Self {
+    async fn start_offering(build: Option<OfferedBuild>) -> Self {
+        Self::start_offering_both(Downloads {
+            desktop: build,
+            android: None,
+        })
+        .await
+    }
+
+    /// A server offering exactly the builds given.
+    ///
+    /// Android is injected separately rather than derived, because "one kind present and the
+    /// other absent" is precisely the state worth being able to describe — and the one a single
+    /// newest-file-wins rule would have made impossible.
+    async fn start_offering_both(downloads: Downloads) -> Self {
         let mut state = cloudpass_server::state::init("sqlite::memory:")
             .await
             .expect("initialise server state");
         Arc::get_mut(&mut state)
             .expect("the state was just created, so nothing else holds it")
-            .desktop_build = build;
+            .downloads = downloads;
         let router = app(Arc::clone(&state));
         Self { router, state }
     }
@@ -1844,7 +1857,7 @@ async fn meta_describes_the_protocol() {
 /// the build it describes — and the rest of the description is not disturbed by it.
 #[tokio::test]
 async fn meta_publishes_the_version_of_the_offered_build() {
-    let harness = Harness::start_offering(Some(DesktopBuild {
+    let harness = Harness::start_offering(Some(OfferedBuild {
         file_name: "CloudPass_1.2.3_x64-setup.exe".to_owned(),
         url: "/download/CloudPass_1.2.3_x64-setup.exe".to_owned(),
         size: 42,
@@ -1882,7 +1895,7 @@ async fn meta_answers_a_server_without_a_build_with_null() {
 /// about which version it is, and a client learns nothing rather than being misled.
 #[tokio::test]
 async fn meta_publishes_a_build_with_no_readable_version_as_null() {
-    let harness = Harness::start_offering(Some(DesktopBuild {
+    let harness = Harness::start_offering(Some(OfferedBuild {
         file_name: "CloudPass_x64-setup.exe".to_owned(),
         url: "/download/CloudPass_x64-setup.exe".to_owned(),
         size: 7,
@@ -1895,4 +1908,65 @@ async fn meta_publishes_a_build_with_no_readable_version_as_null() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["desktop"]["file"], "CloudPass_x64-setup.exe");
     assert!(body["desktop"]["version"].is_null(), "{body}");
+}
+
+/// The Android package is published beside the installer rather than instead of it, and each is
+/// described by its own bytes. This is the property the two extension sets exist to protect: a
+/// server that has both must offer both, whatever their build times.
+#[tokio::test]
+async fn meta_publishes_the_android_build_beside_the_desktop_one() {
+    let harness = Harness::start_offering_both(Downloads {
+        desktop: Some(OfferedBuild {
+            file_name: "CloudPass_1.2.3_x64-setup.exe".to_owned(),
+            url: "/download/CloudPass_1.2.3_x64-setup.exe".to_owned(),
+            size: 42,
+            sha256: "ab".repeat(32),
+            version: Some("1.2.3".to_owned()),
+        }),
+        android: Some(OfferedBuild {
+            file_name: "CloudPass_1.2.3_android.apk".to_owned(),
+            url: "/download/CloudPass_1.2.3_android.apk".to_owned(),
+            size: 84,
+            sha256: "cd".repeat(32),
+            version: Some("1.2.3".to_owned()),
+        }),
+    })
+    .await;
+
+    let (status, body) = harness.get("/api/v1/meta", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    assert_eq!(body["desktop"]["file"], "CloudPass_1.2.3_x64-setup.exe");
+    assert_eq!(body["desktop"]["size"], 42);
+
+    assert_eq!(body["android"]["file"], "CloudPass_1.2.3_android.apk");
+    assert_eq!(body["android"]["url"], "/download/CloudPass_1.2.3_android.apk");
+    assert_eq!(body["android"]["size"], 84);
+    assert_eq!(body["android"]["version"], "1.2.3");
+    assert_ne!(
+        body["desktop"]["sha256"], body["android"]["sha256"],
+        "each artifact is described by its own bytes: {body}"
+    );
+}
+
+/// A server with an Android build and no Windows one says exactly that: the absent kind is
+/// null rather than filled in with the artifact that does exist.
+#[tokio::test]
+async fn meta_says_null_for_the_kind_that_is_absent() {
+    let harness = Harness::start_offering_both(Downloads {
+        desktop: None,
+        android: Some(OfferedBuild {
+            file_name: "CloudPass_0.1.0_android.apk".to_owned(),
+            url: "/download/CloudPass_0.1.0_android.apk".to_owned(),
+            size: 1024,
+            sha256: "ef".repeat(32),
+            version: Some("0.1.0".to_owned()),
+        }),
+    })
+    .await;
+
+    let (status, body) = harness.get("/api/v1/meta", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body["desktop"].is_null(), "{body}");
+    assert_eq!(body["android"]["file"], "CloudPass_0.1.0_android.apk");
 }

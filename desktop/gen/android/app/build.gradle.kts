@@ -14,6 +14,22 @@ val tauriProperties = Properties().apply {
     }
 }
 
+// The release signing key, kept in a machine-local file rather than in git: losing it means no
+// future build can be installed over an existing one, and publishing it lets anybody else sign
+// an update for this application id.
+//
+// It is read conditionally so that a machine without the file still builds. That build is
+// unsigned and cannot be installed — which is exactly what its name says — and it is far more
+// useful than a Gradle failure, because it is how a contributor checks that the Android
+// project compiles at all.
+val keystoreProperties = Properties().apply {
+    val propFile = rootProject.file("keystore.properties")
+    if (propFile.exists()) {
+        propFile.inputStream().use { load(it) }
+    }
+}
+val hasSigningKey = keystoreProperties.getProperty("storeFile") != null
+
 android {
     compileSdk = 37
     namespace = "dev.cloudpass.desktop"
@@ -24,6 +40,16 @@ android {
         targetSdk = 37
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
+    }
+    signingConfigs {
+        create("release") {
+            if (hasSigningKey) {
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("password")
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("password")
+            }
+        }
     }
     buildTypes {
         getByName("debug") {
@@ -39,6 +65,9 @@ android {
             }
         }
         getByName("release") {
+            if (hasSigningKey) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             optimization {
                enable = true
             }

@@ -1,0 +1,32 @@
+# One domain, one upstream.
+#
+# Caddy obtains and renews the certificate itself, which is the whole reason it is here:
+# there is no certbot to install, no renewal timer to forget, and no half-configured
+# redirect to reason about. TLS is not a nicety for this application — the master password
+# crosses this connection, and the browser's Clipboard API refuses to work outside a secure
+# context, so a portal served over plain HTTP is one where copying a password silently does
+# nothing.
+#
+# The domain is a variable rather than a literal so that this file is not a second place the
+# name is written down; `deploy/.env` is the first.
+{
+	# Where Let's Encrypt sends expiry warnings. An address that nobody reads is the failure
+	# this line exists to prevent.
+	email {$ACME_EMAIL}
+}
+
+{$CLOUDPASS_DOMAIN} {
+	# The application serves its own CSP, `no-store` and the rest. Nothing below should
+	# duplicate or weaken those headers; Caddy adds HSTS on its own for an HTTPS site, which
+	# is the one header the application cannot set for itself.
+	encode zstd gzip
+
+	# `cloudpass` is the service name on the compose network — the application's port is
+	# reachable here without being published to the host at all.
+	reverse_proxy cloudpass:8080
+
+	# No access log on purpose. Caddy does not write one unless asked, and asking would put
+	# client addresses and request paths on disk — more than the application itself logs, and
+	# the opposite of what docs/THREAT-MODEL.md commits to. Container stdout still carries
+	# errors, which is what a failing deployment needs.
+}

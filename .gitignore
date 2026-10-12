@@ -13,6 +13,7 @@ desktop/gen/android/.kotlin/
 desktop/gen/android/build/
 desktop/gen/android/app/build/
 desktop/gen/android/local.properties
+desktop/gen/android/keystore.properties
 *.jks
 *.keystore
 
@@ -25,6 +26,16 @@ web/web/ui/pkg/
 # directory means "nothing to offer" rather than a failure.
 web/web/ui/download/*
 !web/web/ui/download/.gitkeep
+
+# What a public deployment accumulates on the machine it runs on: the two client builds the
+# server hands out, and the archived copies of the database volume. Both are output. The
+# directory markers and the `.env.example` template are source.
+#
+# `deploy/.env` needs no rule of its own — the `.env` entry under "Local secrets" matches at
+# any depth.
+deploy/download/*
+!deploy/download/.gitkeep
+deploy/backups/
 
 # Vendored toolchain bootstrap (rustup-init.exe and friends)
 /.tools

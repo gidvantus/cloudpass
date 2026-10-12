@@ -158,6 +158,35 @@
               <p class="fingerprint" id="desktop-hash" hidden></p>
             </div>
           </section>
+
+          <!-- Сборка для телефона. Отдельный блок, а не вторая кнопка в том же: это другое
+               приложение для другого устройства, и человеку нужно видеть, что именно он
+               скачивает. Появляется так же — только если сервер действительно её раздаёт. -->
+          <section class="android" id="android-block" hidden>
+            <div class="android-text">
+              <p class="eyebrow" data-i18n="landing-android-eyebrow">Приложение для Android</p>
+              <h2 data-i18n="landing-android-title">Тот же аккаунт, но в телефоне</h2>
+              <p class="lede" data-i18n="landing-android-lede">
+                Отдельный установочный файл для телефона или планшета. Откройте его на
+                устройстве и разрешите установку из этого источника — приложение
+                подключается к тому же аккаунту, что и портал.
+              </p>
+            </div>
+            <div class="android-download">
+              <!-- The label is a translation key; `app.js` only fills in the `href`. -->
+              <a
+                class="btn btn-solid"
+                id="android-link"
+                href="#"
+                download
+                data-i18n="landing-android-download"
+              >
+                Скачать
+              </a>
+              <p class="note" id="android-meta"></p>
+              <p class="fingerprint" id="android-hash" hidden></p>
+            </div>
+          </section>
         </main>
 
         <footer class="footer">

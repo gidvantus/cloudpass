@@ -32,12 +32,13 @@ pub struct AppState {
     /// Not a secret: it is a path to public files, and the only reason it lives in the
     /// state is so that it is resolved once instead of on every request.
     pub web_root: Option<PathBuf>,
-    /// The desktop build this server offers for download, if it has one.
+    /// The builds this server offers for download: the Windows installer and the Android
+    /// package, either of which may be absent.
     ///
-    /// Discovered and hashed once at startup: the artifact is tens of megabytes, and a
-    /// download endpoint that re-read it on every request just to describe it would be a
+    /// Discovered and hashed once at startup: the artifacts are tens of megabytes each, and a
+    /// download endpoint that re-read them on every request just to describe them would be a
     /// needless way to spend a disk.
-    pub desktop_build: Option<crate::downloads::DesktopBuild>,
+    pub downloads: crate::downloads::Downloads,
 }
 
 impl std::fmt::Debug for AppState {
@@ -77,20 +78,31 @@ pub async fn init(database_url: &str) -> ApiResult<Arc<AppState>> {
 
     let web_root = crate::static_files::resolve_root(&crate::static_files::default_root());
 
-    // Looked for next to the portal, because that is where the build scripts put it and where
+    // Looked for next to the portal, because that is where the build scripts put them and where
     // the static handler already serves from. No portal and no override means no download to
     // offer — a statement about this server, not a failure of it.
-    let desktop_build = crate::downloads::resolve_directory(web_root.as_deref())
-        .and_then(|directory| crate::downloads::find_build(&directory));
+    let downloads = crate::downloads::resolve_directory(web_root.as_deref()).map_or_else(
+        crate::downloads::Downloads::default,
+        |directory| crate::downloads::collect(&directory),
+    );
 
-    if let Some(build) = &desktop_build {
-        tracing::info!(
-            file = %build.file_name,
-            version = %build.version.as_deref().unwrap_or("unknown"),
-            bytes = build.size,
-            sha256 = %build.sha256,
-            "offering a desktop build for download"
-        );
+    // One line per artifact, because "which builds is this server actually offering" is the
+    // first question somebody asks when the portal shows a download they did not expect — or
+    // fails to show one they did.
+    for (kind, build) in [
+        ("desktop", downloads.desktop.as_ref()),
+        ("android", downloads.android.as_ref()),
+    ] {
+        if let Some(build) = build {
+            tracing::info!(
+                kind,
+                file = %build.file_name,
+                version = %build.version.as_deref().unwrap_or("unknown"),
+                bytes = build.size,
+                sha256 = %build.sha256,
+                "offering a build for download"
+            );
+        }
     }
 
     Ok(Arc::new(AppState {
@@ -101,7 +113,7 @@ pub async fn init(database_url: &str) -> ApiResult<Arc<AppState>> {
             .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
             .unwrap_or(true),
         web_root,
-        desktop_build,
+        downloads,
     }))
 }
 

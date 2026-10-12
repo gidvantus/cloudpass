@@ -1,4 +1,4 @@
-//! The desktop application, offered for download from the portal.
+//! The application builds offered for download from the portal.
 //!
 //! # Why this is more than a static file
 //!
@@ -13,19 +13,28 @@
 //!
 //! # Discovery, not configuration
 //!
-//! The build scripts drop the artifact into `<web root>/download/`, which is the directory the
-//! static file handler already serves. There is no list to maintain: whatever installer is
-//! newest is the one offered, and a server whose directory is empty simply reports that it has
-//! nothing to offer. An error would be wrong — the API is the product and the portal is one
-//! client of it; a portal without a download is a portal, not a broken server.
+//! The build scripts drop the artifacts into `<web root>/download/`, which is the directory the
+//! static file handler already serves. There is no list to maintain: within each kind, whatever
+//! build is newest is the one offered, and a server whose directory is empty simply reports that
+//! it has nothing to offer. An error would be wrong — the API is the product and the portal is
+//! one client of it; a portal without a download is a portal, not a broken server.
+//!
+//! # Two kinds, chosen independently
+//!
+//! The two artifacts are a Windows installer and an Android package, and they are looked for
+//! *within their own kinds* rather than against each other. That is the whole reason the
+//! extension sets exist: with one "newest file wins" rule, rebuilding the Android app would
+//! silently stop offering the Windows one, and the person who came for the installer would find
+//! an APK behind the link instead. A server that has only one of the two offers only that one,
+//! and the portal shows only what is actually there.
 
 use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
-/// A build of the desktop client that this server offers.
+/// A build of the client that this server offers for download.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DesktopBuild {
+pub struct OfferedBuild {
     /// File name inside the download directory.
     pub file_name: String,
     pub size: u64,
@@ -42,9 +51,30 @@ pub struct DesktopBuild {
     pub version: Option<String>,
 }
 
-/// Reads the version out of an installer's file name.
+/// Everything this server has to hand out.
 ///
-/// `CloudPass_1.2.3_x64-setup.exe` is the shape the build script produces, and the version
+/// `None` in either field is an ordinary answer, and so is `None` in both: a server built
+/// without running a build script has nothing to offer, and the portal then shows no download
+/// at all rather than a link that 404s.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Downloads {
+    /// The Windows application, if a build of it is present.
+    pub desktop: Option<OfferedBuild>,
+    /// The Android application, if a build of it is present.
+    pub android: Option<OfferedBuild>,
+}
+
+impl Downloads {
+    /// Whether there is nothing at all to offer.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.desktop.is_none() && self.android.is_none()
+    }
+}
+
+/// Reads the version out of an artifact's file name.
+///
+/// `CloudPass_1.2.3_x64-setup.exe` is the shape the build scripts produce, and the version
 /// is the field between the underscores that parses as semantic versioning. The name is
 /// split on `_` rather than searched with a pattern, so that a version embedded in some
 /// other part of the name — a build host, a date — cannot be mistaken for the artifact's
@@ -80,13 +110,39 @@ pub fn parse_version(file_name: &str) -> Option<String> {
 /// was made without the bundler.
 const INSTALLER_EXTENSIONS: [&str; 2] = ["exe", "msi"];
 
-/// Finds the newest desktop build in `directory`, if there is one.
+/// Extensions that mean "an Android package".
+///
+/// `.apk` and nothing else: `.aab` is the bundle a store takes, and it is deliberately not
+/// offered here, because a file that no phone can install is worse than no link at all.
+const ANDROID_EXTENSIONS: [&str; 1] = ["apk"];
+
+/// Finds the newest Windows build in `directory`, if there is one.
+#[must_use]
+pub fn find_installer(directory: &Path) -> Option<OfferedBuild> {
+    newest_with_extension(directory, &INSTALLER_EXTENSIONS)
+}
+
+/// Finds the newest Android build in `directory`, if there is one.
+#[must_use]
+pub fn find_apk(directory: &Path) -> Option<OfferedBuild> {
+    newest_with_extension(directory, &ANDROID_EXTENSIONS)
+}
+
+/// Describes everything in `directory` that this server knows how to hand out.
+#[must_use]
+pub fn collect(directory: &Path) -> Downloads {
+    Downloads {
+        desktop: find_installer(directory),
+        android: find_apk(directory),
+    }
+}
+
+/// Finds the newest file in `directory` whose extension is one of `extensions`.
 ///
 /// Returns `None` for a missing directory, an empty one, one holding only the `.gitkeep` that
 /// keeps the directory in version control, or one whose only candidate cannot be read. None of
 /// those is an error condition for the server.
-#[must_use]
-pub fn find_build(directory: &Path) -> Option<DesktopBuild> {
+fn newest_with_extension(directory: &Path, extensions: &[&str]) -> Option<OfferedBuild> {
     let mut candidates: Vec<(std::time::SystemTime, PathBuf)> = std::fs::read_dir(directory)
         .ok()?
         .filter_map(Result::ok)
@@ -97,7 +153,7 @@ pub fn find_build(directory: &Path) -> Option<DesktopBuild> {
                     .extension()
                     .and_then(|extension| extension.to_str())
                     .is_some_and(|extension| {
-                        INSTALLER_EXTENSIONS
+                        extensions
                             .iter()
                             .any(|known| extension.eq_ignore_ascii_case(known))
                     })
@@ -116,7 +172,7 @@ pub fn find_build(directory: &Path) -> Option<DesktopBuild> {
     let file_name = path.file_name()?.to_str()?.to_owned();
     let size = path.metadata().ok()?.len();
 
-    Some(DesktopBuild {
+    Some(OfferedBuild {
         url: format!("/download/{file_name}"),
         sha256: hash_file(&path)?,
         version: parse_version(&file_name),
@@ -160,10 +216,10 @@ fn hex(bytes: &[u8]) -> String {
     out
 }
 
-/// The directory desktop builds are looked for in.
+/// The directory builds are looked for in.
 ///
 /// `CLOUDPASS_DOWNLOAD_DIR` if it is set, otherwise `download/` inside the portal's own root —
-/// which is where the build scripts put the artifact and where the static handler already
+/// which is where the build scripts put the artifacts and where the static handler already
 /// serves from, so the common case needs no configuration at all.
 #[must_use]
 pub fn resolve_directory(web_root: Option<&Path>) -> Option<PathBuf> {
@@ -192,20 +248,24 @@ mod tests {
     #[test]
     fn an_empty_directory_offers_nothing() {
         let dir = scratch("empty");
-        assert_eq!(find_build(&dir), None);
+        assert_eq!(find_installer(&dir), None);
+        assert_eq!(find_apk(&dir), None);
+        assert!(collect(&dir).is_empty());
         let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn a_directory_that_does_not_exist_offers_nothing() {
-        assert_eq!(find_build(Path::new("definitely/not/here")), None);
+        assert_eq!(find_installer(Path::new("definitely/not/here")), None);
+        assert_eq!(find_apk(Path::new("definitely/not/here")), None);
     }
 
     #[test]
     fn the_gitkeep_that_holds_the_directory_is_not_an_installer() {
         let dir = scratch("gitkeep");
         fs::write(dir.join(".gitkeep"), b"").expect("write");
-        assert_eq!(find_build(&dir), None);
+        assert_eq!(find_installer(&dir), None);
+        assert_eq!(find_apk(&dir), None);
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -215,7 +275,7 @@ mod tests {
         let file = dir.join("CloudPass_0.1.0_x64-setup.exe");
         fs::write(&file, b"not really an installer").expect("write");
 
-        let build = find_build(&dir).expect("found");
+        let build = find_installer(&dir).expect("found");
         assert_eq!(build.file_name, "CloudPass_0.1.0_x64-setup.exe");
         assert_eq!(build.url, "/download/CloudPass_0.1.0_x64-setup.exe");
         assert_eq!(build.size, "not really an installer".len() as u64);
@@ -235,10 +295,10 @@ mod tests {
         let file = dir.join("CloudPass_0.1.0_x64-setup.exe");
 
         fs::write(&file, b"first build").expect("write");
-        let first = find_build(&dir).expect("found").sha256;
+        let first = find_installer(&dir).expect("found").sha256;
 
         fs::write(&file, b"second build").expect("write");
-        let second = find_build(&dir).expect("found").sha256;
+        let second = find_installer(&dir).expect("found").sha256;
 
         assert_ne!(first, second);
         assert_eq!(first.len(), 64);
@@ -260,7 +320,7 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(1100));
         fs::write(&new, b"new").expect("write");
 
-        let build = find_build(&dir).expect("found");
+        let build = find_installer(&dir).expect("found");
         assert_eq!(build.file_name, "CloudPass_0.1.0_x64-setup.exe");
         assert_eq!(build.size, 3);
 
@@ -297,7 +357,7 @@ mod tests {
         let file = dir.join("CloudPass_1.2.3_x64-setup.exe");
         fs::write(&file, b"installer").expect("write");
 
-        let build = find_build(&dir).expect("found");
+        let build = find_installer(&dir).expect("found");
         assert_eq!(build.version.as_deref(), Some("1.2.3"));
         // Everything else about the description is unchanged by the addition.
         assert_eq!(build.file_name, "CloudPass_1.2.3_x64-setup.exe");
@@ -313,7 +373,7 @@ mod tests {
         let dir = scratch("noversion");
         fs::write(dir.join("CloudPass_x64-setup.exe"), b"installer").expect("write");
 
-        let build = find_build(&dir).expect("found");
+        let build = find_installer(&dir).expect("found");
         assert_eq!(build.version, None);
         assert_eq!(build.file_name, "CloudPass_x64-setup.exe");
         assert_eq!(build.sha256.len(), 64);
@@ -326,7 +386,75 @@ mod tests {
         let dir = scratch("other");
         fs::write(dir.join("notes.txt"), b"readme").expect("write");
         fs::write(dir.join("cloudpass_web_bg.wasm"), b"\0asm").expect("write");
-        assert_eq!(find_build(&dir), None);
+        assert_eq!(find_installer(&dir), None);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_apk_is_described_with_its_real_hash_and_version() {
+        let dir = scratch("apk");
+        fs::write(dir.join("CloudPass_0.1.0_android.apk"), b"not really an apk").expect("write");
+
+        let build = find_apk(&dir).expect("found");
+        assert_eq!(build.file_name, "CloudPass_0.1.0_android.apk");
+        assert_eq!(build.url, "/download/CloudPass_0.1.0_android.apk");
+        assert_eq!(build.size, "not really an apk".len() as u64);
+        assert_eq!(build.version.as_deref(), Some("0.1.0"));
+        assert_eq!(build.sha256.len(), 64);
+
+        // An APK is not an installer, and the reverse: neither search may see the other's file.
+        assert_eq!(find_installer(&dir), None);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The bug this guards against is the one the two extension sets exist for: a single
+    /// "newest file wins" rule would let a freshly built APK displace the Windows installer,
+    /// and the portal would hand a phone package to somebody who asked for a desktop program.
+    #[test]
+    fn a_newer_apk_does_not_displace_the_installer() {
+        let dir = scratch("both");
+        let installer = dir.join("CloudPass_0.1.0_x64-setup.exe");
+        fs::write(&installer, b"installer").expect("write");
+
+        // Written second, so it is unambiguously the newest file in the directory.
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        fs::write(dir.join("CloudPass_0.2.0_android.apk"), b"apk").expect("write");
+
+        let downloads = collect(&dir);
+        assert!(!downloads.is_empty());
+        assert_eq!(
+            downloads.desktop.expect("desktop offered").file_name,
+            "CloudPass_0.1.0_x64-setup.exe"
+        );
+        assert_eq!(
+            downloads.android.expect("android offered").file_name,
+            "CloudPass_0.2.0_android.apk"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// An `.aab` is what a store takes, and no phone installs it directly. Offering it would
+    /// be a link that looks like a download and is not one.
+    #[test]
+    fn an_app_bundle_is_not_offered_as_an_apk() {
+        let dir = scratch("aab");
+        fs::write(dir.join("CloudPass_0.1.0_android.aab"), b"bundle").expect("write");
+        assert_eq!(find_apk(&dir), None);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_directory_with_only_an_apk_offers_no_desktop_build() {
+        let dir = scratch("apk-only");
+        fs::write(dir.join("CloudPass_0.1.0_android.apk"), b"apk").expect("write");
+
+        let downloads = collect(&dir);
+        assert_eq!(downloads.desktop, None);
+        assert!(downloads.android.is_some());
+        assert!(!downloads.is_empty());
+
         let _ = fs::remove_dir_all(&dir);
     }
 }

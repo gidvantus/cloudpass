@@ -13,6 +13,12 @@ web/web/ui/pkg/
 # The Tauri build output and its generated permission schemas.
 desktop/gen/
 
+# The public deployment's own state: the compose file, the Caddyfile, the two client builds
+# the server hands out and its volume archives. `deploy/compose.yaml` mounts each of those at
+# run time, so none of it is build input — and the downloads alone are tens of megabytes that
+# would otherwise be copied into a layer nothing reads.
+deploy/
+
 # Vendored toolchain bootstrap and a local cargo home, if the developer has them here.
 .tools/
 .cargo/

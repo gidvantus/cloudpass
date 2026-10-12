@@ -1,0 +1,8 @@
+# Line endings the repository does not leave to `core.autocrlf`.
+#
+# Everything else is text and survives either convention. These are scripts that run on a
+# Linux server, where a carriage return before every newline is not a cosmetic difference:
+# `/bin/sh` reports the interpreter path as `sh^M` and refuses to run the file at all. Pinning
+# it here means the rule travels with the repository instead of depending on the clone's
+# configuration, which on a developer's Windows machine is exactly what would rewrite it.
+deploy/*.sh text eol=lf

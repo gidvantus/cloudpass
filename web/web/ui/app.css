@@ -406,11 +406,14 @@ h2 {
   color: #3d3d3d;
 }
 
-/* --- the desktop build ----------------------------------------------------- */
+/* --- the offered builds ---------------------------------------------------- */
 
 /* Sits after the inverted panel, so the page ends on the black half of the palette rather
-   than on a white block. A hairline above keeps it from reading as a stray paragraph. */
-.desktop {
+   than on a white block. A hairline above keeps it from reading as a stray paragraph. The
+   Android offer reuses every rule: it is the same kind of thing in the same place, and two
+   blocks that had to be kept in step by hand would drift the first time one was touched. */
+.desktop,
+.android {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 40px;
@@ -419,20 +422,23 @@ h2 {
   border-top: 1px solid var(--line);
 }
 
-.desktop-text {
+.desktop-text,
+.android-text {
   display: flex;
   flex-direction: column;
   gap: 14px;
   max-width: 46ch;
 }
 
-.desktop-text h2 {
+.desktop-text h2,
+.android-text h2 {
   font-size: clamp(1.25rem, 2.2vw, 1.6rem);
   font-weight: 600;
   letter-spacing: -0.02em;
 }
 
-.desktop-download {
+.desktop-download,
+.android-download {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -865,14 +871,16 @@ select:focus,
     gap: 6px;
   }
 
-  .desktop {
+  .desktop,
+  .android {
     grid-template-columns: 1fr;
     gap: 24px;
   }
 
   /* Left-aligned once the button is under the text rather than beside it: a right-aligned
      block on its own line reads as a mistake. */
-  .desktop-download {
+  .desktop-download,
+  .android-download {
     align-items: flex-start;
     text-align: left;
   }

@@ -1,0 +1,22 @@
+{
+  "name": "cloudpass-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Build-time tooling for the CloudPass desktop and Android clients.",
+  "//": [
+    "This file exists for one reason: the Android build does not start without it.",
+    "The Rust plugin inside desktop/gen/android runs `npm run -- tauri android",
+    "android-studio-script`, and npm refuses to run a script that no package.json",
+    "declares. The desktop build never noticed, because scripts/build-desktop.ps1",
+    "calls the Tauri CLI through npx directly.",
+    "The CLI is a dev dependency rather than another npx call because Gradle is the",
+    "caller here: it resolves `tauri` through node_modules, and a version pinned in",
+    "one place is the version both builds use."
+  ],
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.1"
+  }
+}
