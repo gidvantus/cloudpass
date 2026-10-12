@@ -15,6 +15,9 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+# Only so `build.rs` can read `server-url.toml`. Already in the graph through Tauri, so this
+# adds an edge rather than a crate to download.
+toml = "0.8"
 
 [dependencies]
 cloudpass-client = { path = "../crates/cloudpass-client" }

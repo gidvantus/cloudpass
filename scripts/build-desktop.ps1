@@ -21,6 +21,15 @@
 # has nothing to do with whether the build worked. Success is decided by `$LASTEXITCODE`.
 
 param(
+    # Which entry of `desktop/server-url.toml` the build bakes in.
+    #
+    # Production by default, because this script exists to produce the installer the server
+    # hands out: one that points at loopback is useless to whoever downloads it, and the
+    # mistake is invisible until they run it. `-ServerProfile local` builds an installer to
+    # test against a server on this machine.
+    [ValidateSet('local', 'production')]
+    [string]$ServerProfile = 'production',
+
     [string]$OutputDirectory = 'web/web/ui/download'
 )
 
@@ -31,8 +40,20 @@ Set-Location $root
 # Sourcing this here rather than demanding it from the caller is the difference between a script
 # that works when run and one that works when remembered correctly.
 . (Join-Path $PSScriptRoot 'env.ps1')
+. (Join-Path $PSScriptRoot 'server-url.ps1')
 
-Write-Host 'Building the desktop application (release, NSIS bundle)...'
+# Read by `desktop/build.rs` while compiling, and declared there as an input, so switching
+# profiles in the same target directory rebuilds the address instead of keeping the previous
+# one.
+$serverUrl = Get-ServerUrl -ServerProfile $ServerProfile
+$env:CLOUDPASS_PROFILE = $ServerProfile
+
+Write-Host "Building the desktop application (release, NSIS bundle, [$ServerProfile] server)..."
+Write-Host "Server:  $serverUrl"
+if ($ServerProfile -eq 'local') {
+    Write-Warning 'This build points at a server on the machine it runs on. Publishing it would hand people an installer that cannot reach anything.'
+}
+
 Push-Location (Join-Path $root 'desktop')
 try {
     npx --yes '@tauri-apps/cli@2' build
@@ -41,6 +62,14 @@ try {
     Pop-Location
 }
 if ($tauriExit -ne 0) { throw "the Tauri build failed with $tauriExit" }
+
+# Against the release binary, not against the installer that carries it: NSIS compresses its
+# payload, so a perfectly good installer does not contain the address in any form a search can
+# find, and a check that can never pass is worse than no check. The installer is built from
+# this binary, so verifying it verifies what was published. A stale `target/` produces an
+# installer that looks for a server on the wrong machine, and this is the last moment at which
+# noticing that is cheap.
+Assert-ArtifactCarriesUrl -Path (Join-Path $root 'target/release/cloudpass-desktop.exe') -Url $serverUrl
 
 # The installer is preferred: it registers an uninstaller and a shortcut, which is what a person
 # expects from something they downloaded. The bare executable is the fallback for a build made
@@ -76,5 +105,6 @@ Write-Host ''
 Write-Host "Placed:  $OutputDirectory/$($artifact.Name)"
 Write-Host "Size:    $([math]::Round($size / 1MB, 2)) MiB ($size bytes)"
 Write-Host "SHA-256: $hash"
+Write-Host "Server:  $serverUrl  [$ServerProfile]"
 Write-Host ''
 Write-Host 'The server publishes exactly this hash from /api/v1/meta at startup.'

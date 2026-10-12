@@ -22,6 +22,15 @@
 # has nothing to do with whether the build worked. Success is decided by `$LASTEXITCODE`.
 
 param(
+    # Which entry of `desktop/server-url.toml` the build bakes in.
+    #
+    # Production by default, for the same reason as in `build-desktop.ps1`: this script exists
+    # to produce the package the server hands out, and one that points at loopback is useless
+    # to whoever downloads it. `-ServerProfile local` builds a package to test against a server
+    # on this machine.
+    [ValidateSet('local', 'production')]
+    [string]$ServerProfile = 'production',
+
     [string]$OutputDirectory = 'web/web/ui/download'
 )
 
@@ -31,6 +40,17 @@ Set-Location $root
 # `cargo` builds the Rust half of the application, so the MSVC environment is needed here for
 # the same reason it is needed for the desktop build.
 . (Join-Path $PSScriptRoot 'env.ps1')
+. (Join-Path $PSScriptRoot 'server-url.ps1')
+
+# Read by `desktop/build.rs` while compiling, and declared there as an input, so switching
+# profiles in the same target directory rebuilds the address instead of keeping the previous
+# one. Gradle is what invokes cargo here, and it passes the environment through.
+$serverUrl = Get-ServerUrl -ServerProfile $ServerProfile
+$env:CLOUDPASS_PROFILE = $ServerProfile
+
+if ($ServerProfile -eq 'local') {
+    Write-Warning 'This build points at a server on the machine it runs on. Publishing it would hand people a package that cannot reach anything.'
+}
 
 # --- the Android toolchain --------------------------------------------------
 
@@ -84,7 +104,8 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "npm install failed with $LASTEXITCODE" }
     }
 
-    Write-Host 'Building the Android application (release APK)...'
+    Write-Host "Building the Android application (release APK, [$ServerProfile] server)..."
+    Write-Host "Server:  $serverUrl"
     npx tauri android build
     $tauriExit = $LASTEXITCODE
 } finally {
@@ -134,6 +155,11 @@ Get-ChildItem $destination -Include '*.apk' -File -ErrorAction SilentlyContinue 
 $target = Join-Path $destination $name
 Copy-Item $artifact.FullName $target -Force
 
+# Not a formality: a stale `target/` produces a package that looks for a server on the wrong
+# machine, and this is the last moment at which noticing that is cheap. It reads the shared
+# library out of the APK, which is where the Rust half — and the address — lives.
+Assert-ArtifactCarriesUrl -Path $target -Url $serverUrl
+
 $hash = (Get-FileHash -Algorithm SHA256 $target).Hash.ToLowerInvariant()
 $size = (Get-Item $target).Length
 
@@ -141,5 +167,6 @@ Write-Host ''
 Write-Host "Placed:  $OutputDirectory/$name"
 Write-Host "Size:    $([math]::Round($size / 1MB, 2)) MiB ($size bytes)"
 Write-Host "SHA-256: $hash"
+Write-Host "Server:  $serverUrl  [$ServerProfile]"
 Write-Host ''
 Write-Host 'The server publishes exactly this hash from /api/v1/meta at startup.'

@@ -1,0 +1,25 @@
+# The address a client points at until its owner changes it in the application.
+#
+# Two names in one file, because the production address should be written down in exactly one
+# place in the repository. `desktop/build.rs` reads this at compile time and bakes the chosen
+# entry into the binary, so a published installer carries the server it was built for instead
+# of looking for one on the machine it lands on.
+#
+# Which entry a build uses is decided by `CLOUDPASS_PROFILE`:
+#
+#   CLOUDPASS_PROFILE=production   the real server, for anything published
+#   unset, or anything else       [local] — what a developer expects from `cargo build`
+#
+# `scripts/build-desktop.ps1` and `scripts/build-android.ps1` set it from their `-ServerProfile`
+# parameter, and check afterwards that the artifact really carries the address: a build that
+# silently kept the previous one is invisible until a user tries to sign in.
+#
+# The application itself still lets the address be changed before an account is registered, and
+# `CLOUDPASS_SERVER_URL` in the environment still overrides this at run time. Both are escape
+# hatches, not the normal path.
+
+[local]
+url = "http://127.0.0.1:8080"
+
+[production]
+url = "https://cloud-pass.ru"

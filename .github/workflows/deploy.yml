@@ -1,0 +1,117 @@
+# What happens when `main` moves: the tests, the image, and the server.
+#
+# The image is built here rather than on the server, and that is a measured decision rather
+# than a preference. The release profile sets `lto = true` and `codegen-units = 1`, so the
+# final link runs in a single process; on this dependency graph that process asks for one to
+# three gigabytes. The server has 961 MB of memory and no swap at all, and a build there is
+# killed by the OOM killer before it finishes. A runner has both memory and cores.
+#
+# Nothing here builds the desktop or the Android clients. They need MSVC, the Android SDK, the
+# signing key and a Windows machine, and they are published by hand from one — see
+# `docs/DEPLOY.md`. This workflow moves the server and the portal, which is everything the
+# repository can build by itself.
+#
+# Set up once, in the repository settings:
+#
+#   secret    DEPLOY_SSH_KEY   the private half of the key whose public half is in
+#                              /root/.ssh/authorized_keys on the server
+#   variable  DEPLOY_HOST      optional; defaults to the address in `env` below
+#   variable  DEPLOY_USER      optional; defaults to `root`
+#
+# Without that secret the job fails at the first SSH step, loudly, having done nothing.
+
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  # So a deployment can be repeated after a server-side fix, without an empty commit.
+  workflow_dispatch:
+
+# One deployment at a time, and never cancelled halfway: a runner that is between "load the
+# image" and "restart the container" is exactly the thing two interleaved runs would corrupt.
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DEPLOY_HOST: ${{ vars.DEPLOY_HOST || '185.246.220.48' }}
+  DEPLOY_USER: ${{ vars.DEPLOY_USER || 'root' }}
+  DEPLOY_PATH: /opt/cloudpass
+
+  # The Dockerfile needs BuildKit for its cache mounts and for the `# syntax=` directive at the
+  # top. Modern Docker defaults to it; saying so removes the question.
+  DOCKER_BUILDKIT: '1'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The desktop crate is part of the workspace and depends on Tauri, which on Linux links
+      # against the GTK and WebKit stack. Without these, `cargo test --workspace` fails while
+      # compiling a crate whose tests have nothing to do with what is being deployed — and a
+      # deploy pipeline that cannot run the tests is a deploy pipeline that will be trusted
+      # anyway.
+      - name: Install the desktop crate's system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Run the tests
+        run: cargo test --workspace --locked
+
+      - name: Build the image
+        run: docker build --tag cloudpass:local --file web/Dockerfile .
+
+      - name: Prepare the deploy key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+
+          # The server's host keys, pinned rather than discovered with `ssh-keyscan` at deploy
+          # time. A deployment that trusts whatever answers on port 22 is a deployment that can
+          # be redirected, and these keys are public information anyway: pinning them in the
+          # repository is what makes the deploy step verifiable instead of hopeful.
+          cat >> ~/.ssh/known_hosts <<'KNOWN_HOSTS'
+          185.246.220.48 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINKfSvFbyKnRHKAKXX2vyEGR4+rR6pFR6UWTHtd4vdoc
+          185.246.220.48 ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBIDcUdw1oEWLkV9EIIuIRMljGvcXWLs0pjI+vuKSogL8Ws3gUm6RXKhWQdIPjwWF+f7aaT1kbib3cw6IToc9w/Q=
+          185.246.220.48 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDSJQLARrf41gV2bBmyDxEtKeFnvRxUoH235sFu565LUmPk+dB/z7tr2W+eejqd5ZXPjmK77q8x5Jr1kAn16skJnKUAFZMpjrmsqBLDYKjeGOutQ7jwsoXZKmgCGNA1A9ugCcpTpiw4JY5jjyoCru/Slxv9MXSvvcQmLSS6S+7qAGFOrgOOBIysxil1uFfOkTg7Zao6JoTjhej+oSidRwzuMiyv3r44NEv3m1O7ugE6fHCW6wMoKIok/cWxRvXOH3WWWaGrIjpLF6CXlzPrcmsLvSGxiZEyCdT3qcDq1kR857x8SAjtLPLVkYErVvyblpCIic4FnY0nQ5Wuc8S48MGaQxHc4LJC4rROJjD1Jt4ckHOw4Iim+U1qk+AQG4w2ecArb/dmAI8M7ZwTLo8rnzxfkAsTs544OG1+A1AtUpCR1aSMgF6VnruDkDXlsaEj7kwmiYo/IUgmz2kkWYRvypqFUQr3a9EY5+vzbSbOnhDxKvSOsZFKFU/i6HLybYLDjfc=
+          KNOWN_HOSTS
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Ship the image
+        run: |
+          docker save cloudpass:local | gzip -1 | \
+            ssh -i ~/.ssh/deploy "$DEPLOY_USER@$DEPLOY_HOST" 'gunzip | docker load'
+
+      - name: Bring the deployment up
+        run: |
+          ssh -i ~/.ssh/deploy "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cd $DEPLOY_PATH && git fetch --depth 1 origin main && git reset --hard origin/main && docker compose --env-file deploy/.env -f deploy/compose.yaml up -d"
+
+      # A deployment that reports success while the site is down is worse than one that fails,
+      # so the last step asks the site. The address comes from the same file the clients are
+      # built from, which is the one place it is written down.
+      - name: Check that it answers
+        run: |
+          url=$(python3 -c "import tomllib,pathlib;print(tomllib.loads(pathlib.Path('desktop/server-url.toml').read_text())['production']['url'])")
+          echo "checking $url/api/v1/meta"
+          for attempt in 1 2 3 4 5; do
+            if curl -fsS --max-time 10 "$url/api/v1/meta" > /dev/null; then
+              echo 'the portal answers'
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "no answer from $url after the deployment" >&2
+          exit 1

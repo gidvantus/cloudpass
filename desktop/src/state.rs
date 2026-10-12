@@ -235,13 +235,22 @@ impl AppState {
         self.vault.as_mut().ok_or(ClientError::Locked)
     }
 
-    /// The server URL from the environment, or the local default.
+    /// The address this build points at until its owner changes it in the application.
     ///
-    /// Mode A with the server on this machine is the intended setup before a VPS
-    /// exists, so the default points at loopback rather than at some hosted service.
+    /// Baked in at compile time by `build.rs` from `desktop/server-url.toml`.
+    /// `CLOUDPASS_PROFILE=production` selects the real server; anything else gets loopback,
+    /// which is Mode A with the server on this machine — the intended setup before a VPS
+    /// exists.
+    pub const DEFAULT_SERVER_URL: &str = env!("CLOUDPASS_DEFAULT_SERVER_URL");
+
+    /// The server URL from the environment, or the one this build was made with.
+    ///
+    /// The environment still wins: that is how a test, or a one-off run against another
+    /// server, points the application somewhere without rebuilding it.
     #[must_use]
     pub fn default_server_url() -> String {
-        std::env::var("CLOUDPASS_SERVER_URL").unwrap_or_else(|_| "http://127.0.0.1:8080".to_owned())
+        std::env::var("CLOUDPASS_SERVER_URL")
+            .unwrap_or_else(|_| Self::DEFAULT_SERVER_URL.to_owned())
     }
 }
 
