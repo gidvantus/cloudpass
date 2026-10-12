@@ -16,6 +16,7 @@
 | [`docs/CRYPTO.md`](docs/CRYPTO.md) | Иерархия ключей, форматы конвертов, OPAQUE, anti-rollback, тестовые векторы |
 | [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) | Модели угроз, меры защиты, что сознательно **не** защищено |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Фазы работ и критерии приёмки |
+| [`docs/DEPLOY.md`](docs/DEPLOY.md) | Развёртывание на сервере: Caddy и TLS, бэкап тома, обновление |
 
 ## Структура
 
@@ -278,6 +279,10 @@ $env:CLOUDPASS_PORT=8090; docker compose -f web/compose.yaml up -d    # PowerShe
 - **Образ не для публичного продакшена.** Это витрина и домашний сервер: SQLite вместо
   PostgreSQL, без TLS, без rate limiting, без бэкапов. Список того, что нужно перед публичным
   развёртыванием, — в `docs/ROADMAP.md`.
+- **Публичное развёртывание — это `deploy/`, а не этот файл.** `web/compose.yaml` описывает
+  приложение; `deploy/compose.yaml` добавляет к нему Caddy с автоматическим Let's Encrypt,
+  а `deploy/backup.sh` — консистентную копию тома. Порядок действий, эксплуатация и всё, чего
+  в этом развёртывании по-прежнему нет, — в `docs/DEPLOY.md`.
 
 Полезное:
 
